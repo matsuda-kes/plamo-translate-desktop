@@ -25,6 +25,9 @@ use crate::view::TranslatorView;
 
 rust_i18n::i18n!("locales", fallback = "en");
 
+#[cfg(target_os = "macos")]
+actions!(application, [Quit]);
+
 fn custom_model() -> Option<PathBuf> {
     std::env::args_os()
         .nth(1)
