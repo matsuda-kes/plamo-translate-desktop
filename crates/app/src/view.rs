@@ -336,13 +336,7 @@ struct CutMark {
 struct SyncState {
     scroll_y: [Pixels; 2],
     selection: [Range<usize>; 2],
-    /// When a pane was last scrolled to follow the other; its own changes are ignored briefly,
-    /// so the two do not chase each other.
-    followed_at: [Option<Instant>; 2],
 }
-
-/// How long a pane's changes are ignored after it was scrolled to follow the other.
-const FOLLOW_SETTLE: Duration = Duration::from_millis(150);
 
 /// The chunk of a long text being translated: its byte range in the source, and how many
 /// tokens had been generated when it started.
@@ -1949,11 +1943,13 @@ impl TranslatorView {
         let moved = selection != self.sync.selection[i];
         self.sync.scroll_y[i] = scroll_y;
         self.sync.selection[i] = selection.clone();
-        let following = self.sync.followed_at[i].is_some_and(|t| t.elapsed() < FOLLOW_SETTLE);
-        if !self.settings.sync_scroll || following {
+        // Only the pane the reader is interacting with may drive synchronization.
+        // The follower can notify again after layout/scroll clamping, well beyond a
+        // fixed timeout; those notifications must never scroll the focused pane back.
+        if !self.settings.sync_scroll || !focused {
             return;
         }
-        if moved && focused {
+        if moved {
             self.follow_caret(side, selection.start, cx);
         } else if scrolled {
             self.follow_scroll(side, cx);
@@ -2010,7 +2006,6 @@ impl TranslatorView {
 
     /// Scrolls `side` so that `offset` is `y` below the top of the pane.
     fn scroll_pane(&mut self, side: Side, offset: usize, y: Pixels, cx: &mut Context<Self>) {
-        self.sync.followed_at[side as usize] = Some(Instant::now());
         self.pane(side).clone().update(cx, |state, cx| {
             let Some(line_height) = state.line_height() else {
                 return;
