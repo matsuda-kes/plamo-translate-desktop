@@ -11,6 +11,7 @@ mod backend;
 mod browser;
 mod lang;
 mod models;
+mod tts;
 mod view;
 
 // Shared with the browser host; re-exported so the app refers to them as its own modules.

@@ -500,6 +500,9 @@ pub struct TranslatorView {
     source_version: u64,
     shown_version: u64,
     sync: SyncState,
+    speech: crate::tts::Speech,
+    speaking: Option<Side>,
+    speech_task: Task<()>,
     /// Tokens received for the current job, and when the first one arrived (for the live rate).
     stream_tokens: usize,
     stream_started: Option<Instant>,
@@ -802,6 +805,9 @@ impl TranslatorView {
             source_version: 0,
             shown_version: 0,
             sync: SyncState::default(),
+            speech: crate::tts::Speech::default(),
+            speaking: None,
+            speech_task: Task::ready(()),
             stream_tokens: 0,
             stream_started: None,
             job_started: None,
@@ -847,6 +853,10 @@ impl TranslatorView {
         } else if needs_model {
             cx.defer_in(window, |this, window, cx| this.open_models(window, cx));
         }
+        this._subscriptions.push(cx.on_app_quit(|this, _| {
+            this.speech.stop();
+            async {}
+        }));
         this
     }
 
@@ -2458,6 +2468,91 @@ impl TranslatorView {
         cx.notify();
     }
 
+    fn toggle_speech(&mut self, side: Side, window: &mut Window, cx: &mut Context<Self>) {
+        self.speech.stop();
+        self.speech_task = Task::ready(());
+        if self.speaking.take() == Some(side) {
+            cx.notify();
+            return;
+        }
+        let source_is_japanese = self.source_info(cx).looks_japanese;
+        let (text, language) = match side {
+            Side::Source => (
+                self.source_text(cx),
+                self.source_choice
+                    .code()
+                    .unwrap_or(if source_is_japanese { "ja" } else { "en" }),
+            ),
+            Side::Output => (
+                self.translation.clone(),
+                self.shown
+                    .as_ref()
+                    .map(|request| request.options.target.as_str())
+                    .unwrap_or(self.target_choice.resolve_for(source_is_japanese)),
+            ),
+        };
+        if text.trim().is_empty() {
+            cx.notify();
+            return;
+        }
+        match self.speech.start(text, language) {
+            Err(error) => {
+                self.status = Status::Error(error.to_string());
+            }
+            Ok(()) => {
+                self.speaking = Some(side);
+                self.speech_task = cx.spawn_in(window, async move |this, cx| {
+                    loop {
+                        cx.background_executor()
+                            .timer(Duration::from_millis(100))
+                            .await;
+                        let done = this.update(cx, |this, cx| {
+                            match this.speech.finished() {
+                                Ok(false) => return false,
+                                Err(error) => {
+                                    this.status = Status::Error(error.to_string());
+                                }
+                                Ok(true) => {}
+                            }
+                            this.speaking = None;
+                            cx.notify();
+                            true
+                        });
+                        if done.unwrap_or(true) {
+                            break;
+                        }
+                    }
+                });
+            }
+        }
+        cx.notify();
+    }
+
+    fn speech_button(&self, side: Side, cx: &Context<Self>) -> Button {
+        Button::new(match side {
+            Side::Source => "speak-source",
+            Side::Output => "speak-output",
+        })
+        .ghost()
+        .xsmall()
+        .label(
+            t!(if self.speaking == Some(side) {
+                "tts.stop"
+            } else {
+                "tts.speak"
+            })
+            .into_owned(),
+        )
+        .disabled(
+            self.speaking != Some(side)
+                && match side {
+                    Side::Source => self.source.read(cx).value().trim().is_empty(),
+                    Side::Output => self.translation.trim().is_empty(),
+                },
+        )
+        .on_click(cx.listener(move |this, _, window, cx| this.toggle_speech(side, window, cx)))
+    }
+
     fn copy_translation(
         &mut self,
         _: &CopyTranslation,
@@ -2769,6 +2864,9 @@ impl Render for TranslatorView {
                     .text_xs()
                     .text_color(theme.muted_foreground)
                     .child(t!("source.chars", count = char_count).into_owned())
+                    .when(cfg!(target_os = "macos"), |row| {
+                        row.child(self.speech_button(Side::Source, cx))
+                    })
                     .child(
                         Button::new("clear")
                             .ghost()
@@ -2793,25 +2891,30 @@ impl Render for TranslatorView {
                     .h_full(),
             )
             .child(
-                h_flex().justify_end().child(
-                    Button::new("copy")
-                        .ghost()
-                        .xsmall()
-                        .icon(if self.copied {
-                            IconName::Check
-                        } else {
-                            IconName::Copy
-                        })
-                        .label(if self.copied {
-                            t!("action.copied").into_owned()
-                        } else {
-                            t!("action.copy").into_owned()
-                        })
-                        .disabled(self.translation.is_empty())
-                        .on_click(cx.listener(|this, _, window, cx| {
-                            this.copy_translation(&CopyTranslation, window, cx)
-                        })),
-                ),
+                h_flex()
+                    .justify_end()
+                    .when(cfg!(target_os = "macos"), |row| {
+                        row.child(self.speech_button(Side::Output, cx))
+                    })
+                    .child(
+                        Button::new("copy")
+                            .ghost()
+                            .xsmall()
+                            .icon(if self.copied {
+                                IconName::Check
+                            } else {
+                                IconName::Copy
+                            })
+                            .label(if self.copied {
+                                t!("action.copied").into_owned()
+                            } else {
+                                t!("action.copy").into_owned()
+                            })
+                            .disabled(self.translation.is_empty())
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.copy_translation(&CopyTranslation, window, cx)
+                            })),
+                    ),
             );
 
         let status_bar = h_flex()

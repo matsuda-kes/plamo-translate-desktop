@@ -33,6 +33,12 @@ locally on your computer. It works offline once a model is downloaded. Written i
 
 Shortcuts: `Ctrl+Enter` translates now. `Ctrl+Shift+C` copies the translation. On macOS these are `Cmd+Enter` and `Cmd+Shift+C`.
 
+On macOS, use **Read aloud** below either text pane to speak its text with the system voices.
+Press it again to stop; starting the other pane stops the previous speech.
+A voice for the selected language must be installed. With automatic source language,
+speech uses Japanese/English detection; select the source language explicitly for other languages.
+Speech reads a snapshot of the text when started.
+
 ## Models and their license
 
 The app does not ship model weights. When you pick a model in the app, it downloads it from

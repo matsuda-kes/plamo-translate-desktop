@@ -651,3 +651,10 @@ models.catalog_refresh:
 settings.font_size:
   en: Text size
   ja: 原文・訳文の文字サイズ
+
+tts.speak:
+  en: Read aloud
+  ja: 読み上げ
+tts.stop:
+  en: Stop reading
+  ja: 読み上げ停止
