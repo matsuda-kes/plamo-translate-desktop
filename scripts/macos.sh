@@ -13,11 +13,23 @@ export MACOSX_DEPLOYMENT_TARGET=${MACOSX_DEPLOYMENT_TARGET:-12.0}
 export GGML_METAL_EMBED_LIBRARY=ON
 cargo build --workspace --profile dist --bins --examples --locked
 profile="${CARGO_TARGET_DIR:-target}/dist"
-app='dist/PLaMo Translate Desktop.app'
+destination='dist/PLaMo Translate Desktop.app'
+mkdir -p dist
+staging=$(mktemp -d dist/.macos.XXXXXX)
+app="$staging/PLaMo Translate Desktop.app"
+cleanup() {
+    # Restore the previous bundle if installing the new one failed.
+    if [[ -d "$staging/previous.app" && ! -e "$destination" ]]; then
+        mv "$staging/previous.app" "$destination"
+    fi
+    rm -rf "$staging"
+}
+trap cleanup EXIT
+# Never overwrite a running executable: modifying its mapped pages invalidates
+# macOS code signatures, even if the bundle is signed again afterwards.
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp "$profile/plamo-translate-desktop" "$profile/plamo-translate-host" "$app/Contents/MacOS/"
 # Keep the extension next to the executable, as expected by the settings dialog.
-rm -rf "$app/Contents/MacOS/browser-extension"
 cp -R extension "$app/Contents/MacOS/browser-extension"
 version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1)
 cat > "$app/Contents/Info.plist" <<PLIST
@@ -42,4 +54,9 @@ plutil -lint "$app/Contents/Info.plist"
 codesign --force --deep --sign - "$app"
 "$app/Contents/MacOS/plamo-translate-host" --check
 "$profile/examples/translate" --list-devices
-printf 'Built %s\n' "$app"
+codesign --verify --deep --strict "$app"
+if [[ -e "$destination" ]]; then
+    mv "$destination" "$staging/previous.app"
+fi
+mv "$app" "$destination"
+printf 'Built %s\n' "$destination"
