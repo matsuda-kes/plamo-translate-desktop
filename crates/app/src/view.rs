@@ -1178,6 +1178,12 @@ impl TranslatorView {
                     UpdateCheck::Idle,
                     (browser::Registration::NotRegistered, None),
                 ));
+            let font_size = view
+                .upgrade()
+                .map(|view| view.read(cx).settings.font_size.clamp(10, 32))
+                .unwrap_or(16);
+            let smaller_view = view.clone();
+            let larger_view = view.clone();
             let toggle_view = view.clone();
             let updates_view = view.clone();
             let check_view = view.clone();
@@ -1214,6 +1220,38 @@ impl TranslatorView {
                                 .text_color(muted)
                                 .child(t!("settings.ui_scale_note").into_owned()),
                         )
+                        .child(row(
+                            "settings.font_size",
+                            h_flex()
+                                .gap_3()
+                                .items_center()
+                                .child(
+                                    Button::new("font-smaller")
+                                        .label("−")
+                                        .small()
+                                        .disabled(font_size <= 10)
+                                        .on_click(move |_, window, cx| {
+                                            let _ = smaller_view.update(cx, |this, cx| {
+                                                this.set_font_size(font_size.saturating_sub(2), cx);
+                                            });
+                                            window.refresh();
+                                        }),
+                                )
+                                .child(format!("{font_size} px"))
+                                .child(
+                                    Button::new("font-larger")
+                                        .label("+")
+                                        .small()
+                                        .disabled(font_size >= 32)
+                                        .on_click(move |_, window, cx| {
+                                            let _ = larger_view.update(cx, |this, cx| {
+                                                this.set_font_size(font_size + 2, cx);
+                                            });
+                                            window.refresh();
+                                        }),
+                                )
+                                .into_any_element(),
+                        ))
                         .child(row("settings.chunk", select(&chunk)))
                         .child(row("settings.history", select(&history)))
                         .child(
@@ -2334,6 +2372,12 @@ impl TranslatorView {
         }
     }
 
+    fn set_font_size(&mut self, size: u16, cx: &mut Context<Self>) {
+        self.settings.font_size = size.clamp(10, 32);
+        self.settings.save();
+        cx.notify();
+    }
+
     fn set_sync_scroll(&mut self, enabled: bool, cx: &mut Context<Self>) {
         if self.settings.sync_scroll == enabled {
             return;
@@ -2710,6 +2754,7 @@ impl Render for TranslatorView {
             .gap_1()
             .child(
                 Textarea::new(&self.source)
+                    .text_size(scaled(self.settings.font_size.clamp(10, 32) as f32))
                     .flex_1()
                     .h_full()
                     .on_paste(move |_, _, cx| {
@@ -2740,7 +2785,13 @@ impl Render for TranslatorView {
             .min_w_0()
             .h_full()
             .gap_1()
-            .child(Textarea::new(&self.output).readonly(true).flex_1().h_full())
+            .child(
+                Textarea::new(&self.output)
+                    .text_size(scaled(self.settings.font_size.clamp(10, 32) as f32))
+                    .readonly(true)
+                    .flex_1()
+                    .h_full(),
+            )
             .child(
                 h_flex().justify_end().child(
                     Button::new("copy")

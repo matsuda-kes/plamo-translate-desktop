@@ -66,6 +66,8 @@ pub struct Settings {
     /// Size of the interface in percent, on top of the scaling the OS applies (some Linux
     /// desktops apply none on a high-DPI display).
     pub ui_scale: u16,
+    /// Source and translation text size in logical pixels.
+    pub font_size: u16,
     pub document: DocumentSettings,
     /// Scroll the source and the translation together, and show the counterpart of the caret.
     pub sync_scroll: bool,
@@ -84,6 +86,7 @@ impl Default for Settings {
             ui_language: UiLanguage::default(),
             theme: ThemeSetting::default(),
             ui_scale: 100,
+            font_size: 16,
             document: DocumentSettings::default(),
             sync_scroll: true,
             check_updates: true,
