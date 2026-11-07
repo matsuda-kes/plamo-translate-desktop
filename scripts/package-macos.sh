@@ -58,34 +58,7 @@ cp target/dist/plamo-translate-desktop target/dist/plamo-translate-host "$app/Co
 cp -R extension "$app/Contents/Resources/browser-extension"
 ln -s ../Resources/browser-extension "$app/Contents/MacOS/browser-extension"
 
-# The icon, rendered from the same design as the other platforms' (scripts/gen_icons.py), with
-# the margin macOS icons have: the tile covers 824 of 1024 pixels.
-iconset=$(mktemp -d)/AppIcon.iconset
-mkdir -p "$iconset"
-python3 - "$iconset/icon_512x512@2x.png" <<'EOF'
-import sys
-sys.path.insert(0, "scripts")
-import gen_icons
-
-canvas, tile = 1024, 824
-margin = (canvas - tile) // 2
-rows = gen_icons.render(tile, ss=2)
-empty = (0, 0, 0, 0)
-padded = [[empty] * canvas for _ in range(margin)]
-padded += [[empty] * margin + row + [empty] * margin for row in rows]
-padded += [[empty] * canvas for _ in range(canvas - len(padded))]
-with open(sys.argv[1], "wb") as f:
-    f.write(gen_icons.png_bytes(padded))
-EOF
-for size in 16 32 128 256 512; do
-    sips -z "$size" "$size" "$iconset/icon_512x512@2x.png" --out "$iconset/icon_${size}x${size}.png" >/dev/null
-    double=$((size * 2))
-    if [ "$size" != 512 ]; then
-        sips -z "$double" "$double" "$iconset/icon_512x512@2x.png" --out "$iconset/icon_${size}x${size}@2x.png" >/dev/null
-    fi
-done
-iconutil -c icns "$iconset" -o "$app/Contents/Resources/AppIcon.icns"
-rm -rf "$(dirname "$iconset")"
+sh scripts/macos-icon.sh "$app/Contents/Resources/AppIcon.icns"
 
 cat > "$app/Contents/Info.plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>

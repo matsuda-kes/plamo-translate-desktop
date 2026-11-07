@@ -31,6 +31,7 @@ mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp "$profile/plamo-translate-desktop" "$profile/plamo-translate-host" "$app/Contents/MacOS/"
 # Keep the extension next to the executable, as expected by the settings dialog.
 cp -R extension "$app/Contents/MacOS/browser-extension"
+sh scripts/macos-icon.sh "$app/Contents/Resources/AppIcon.icns"
 version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1)
 cat > "$app/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -39,6 +40,7 @@ cat > "$app/Contents/Info.plist" <<PLIST
 <key>CFBundleExecutable</key><string>plamo-translate-desktop</string>
 <key>CFBundleIdentifier</key><string>com.github.tanakh.plamo-translate-desktop</string>
 <key>CFBundleName</key><string>PLaMo Translate Desktop</string>
+<key>CFBundleIconFile</key><string>AppIcon</string>
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>CFBundleShortVersionString</key><string>$version</string>
 <key>CFBundleVersion</key><string>$version</string>
