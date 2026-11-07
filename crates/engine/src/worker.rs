@@ -169,9 +169,7 @@ type EventSink = Arc<dyn Fn(Event) + Send + Sync>;
 /// Handle to the inference worker. Dropping it stops the current job, a model load or a
 /// measurement included, and shuts the worker down.
 pub struct Worker {
-    commands: Option<mpsc::Sender<Command>>,
-    thread: Option<thread::JoinHandle<()>>,
-    stopping: Arc<AtomicBool>,
+    commands: mpsc::Sender<Command>,
     /// The newest job id. Any job with a different id is cancelled or skipped.
     latest: Arc<AtomicU64>,
     /// Set when the handle is dropped: stops a model load or a measurement in progress, which
@@ -305,29 +303,9 @@ impl Worker {
         self.latest.fetch_add(1, Ordering::SeqCst);
     }
 
-    /// Cancel work and join the inference thread. This must finish before native
-    /// process-exit destructors run (not in a time-limited asynchronous quit task).
-    /// Event sinks must not wait for the calling thread while shutdown is joining.
-    pub fn shutdown(&mut self) {
-        self.cancel();
-        self.stopping.store(true, Ordering::SeqCst);
-        self.commands.take(); // Wake a worker waiting for its next command.
-        if let Some(thread) = self.thread.take() {
-            let _ = thread.join();
-        }
-    }
-
     fn send(&self, command: Command) {
         // The worker only exits after the runtime failed, which was already reported.
-        if let Some(commands) = &self.commands {
-            let _ = commands.send(command);
-        }
-    }
-}
-
-impl Drop for Worker {
-    fn drop(&mut self) {
-        self.shutdown();
+        let _ = self.commands.send(command);
     }
 }
 
@@ -352,9 +330,6 @@ fn run(
         let Some(command) = next.take().or_else(|| commands.recv().ok()) else {
             return;
         };
-        if stopping.load(Ordering::SeqCst) {
-            return;
-        }
         match command {
             Command::Load(request) => {
                 if let Some(model) = load(&runtime, &request, &events, &closing) {
@@ -603,35 +578,4 @@ fn measure_device(
         prompt_tokens_per_second: rate(stats.prompt_tokens, stats.prompt_duration),
         generation_tokens_per_second: rate(stats.generated_tokens, stats.generation_duration),
     })
-}
-
-#[cfg(test)]
-mod lifecycle_tests {
-    use super::*;
-
-    #[test]
-    fn shutdown_waits_for_cleanup_and_is_idempotent() {
-        let (commands, receiver) = mpsc::channel();
-        let latest = Arc::new(AtomicU64::new(1));
-        let stopping = Arc::new(AtomicBool::new(false));
-        let cleaned_up = Arc::new(AtomicBool::new(false));
-        let cleaned = cleaned_up.clone();
-        let thread = thread::spawn(move || {
-            // Simulate an idle native worker: cleanup happens after its sender closes.
-            assert!(receiver.recv().is_err());
-            cleaned.store(true, Ordering::SeqCst);
-        });
-        let mut worker = Worker {
-            commands: Some(commands),
-            thread: Some(thread),
-            latest: latest.clone(),
-            stopping: stopping.clone(),
-        };
-        worker.shutdown();
-        assert!(cleaned_up.load(Ordering::SeqCst));
-        assert!(stopping.load(Ordering::SeqCst));
-        assert_ne!(latest.load(Ordering::SeqCst), 1);
-        worker.shutdown();
-        worker.unload(); // Late UI notifications cannot restart a stopped worker.
-    }
 }

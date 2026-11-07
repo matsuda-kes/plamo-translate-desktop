@@ -34,3 +34,7 @@ inherits = "release"
 lto = "fat"
 codegen-units = 1
 strip = true
+
+# gpui-pre-macos 0.3.11 uses unstable Option::map_or_default on macOS.
+[patch.crates-io]
+gpui-pre-macos = { path = "patches/gpui-pre-macos" }
