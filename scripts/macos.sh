@@ -8,7 +8,7 @@ if ! xcrun -sdk macosx metal --version >/dev/null 2>&1; then
     echo '  xcodebuild -downloadComponent MetalToolchain' >&2
     exit 1
 fi
-export MACOSX_DEPLOYMENT_TARGET=${MACOSX_DEPLOYMENT_TARGET:-12.0}
+export MACOSX_DEPLOYMENT_TARGET=${MACOSX_DEPLOYMENT_TARGET:-13.3}
 # Embed Metal shaders so the app does not depend on files in the build tree.
 export GGML_METAL_EMBED_LIBRARY=ON
 cargo build --workspace --profile dist --bins --examples --locked

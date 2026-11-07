@@ -213,6 +213,11 @@ macOS では、上の開発用ビルドでも llama.cpp が Metal で GPU を使
 scripts/package-macos.sh
 ```
 
+ローカルで `.app` だけを作る場合は `scripts/macos.sh` を実行します。
+生成先は `dist/PLaMo Translate Desktop.app` です。起動中のバイナリを上書きせず、新しいバンドルと入れ替えます。
+Xcode の Metal コンパイラが未導入の場合は `xcodebuild -downloadComponent MetalToolchain` で追加してください。
+固定している llama.cpp の Metal シェーダーの互換性問題を回避するため、macOS では BF16 カーネルを無効にしています。
+
 ### 開発
 
 - `crates/pfml`: PFML3（PLaMo のプロンプト形式）のプロンプト構築。

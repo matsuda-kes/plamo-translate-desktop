@@ -220,6 +220,11 @@ The bundle is signed ad hoc, which Gatekeeper accepts only on the Mac that built
 scripts/package-macos.sh
 ```
 
+For a local app bundle without a disk image, run `scripts/macos.sh`.
+It creates `dist/PLaMo Translate Desktop.app`, replacing the bundle without overwriting a running executable.
+If Xcode's Metal compiler is missing, install it with `xcodebuild -downloadComponent MetalToolchain`.
+On macOS, BF16 kernels are disabled to work around a Metal shader compatibility issue in the pinned llama.cpp.
+
 ### Development
 
 - `crates/pfml`: PFML3 prompt builder (the PLaMo prompt format).
