@@ -20,6 +20,12 @@ cd "$(dirname "$0")/.."
 
 test "$(uname -s)" = Darwin || { echo "this script runs on macOS" >&2; exit 1; }
 
+if ! cargo about --version >/dev/null 2>&1; then
+    echo "cargo-about is required to generate third-party notices." >&2
+    echo "Install it with: brew install cargo-about (or cargo install cargo-about --locked)" >&2
+    exit 1
+fi
+
 export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-13.3}"
 identity="${CODESIGN_IDENTITY:--}"
 

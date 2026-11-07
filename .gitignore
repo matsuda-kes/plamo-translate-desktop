@@ -3,3 +3,7 @@
 /dist
 /cli
 /THIRD-PARTY-NOTICES.txt
+
+# macOS packaging outputs.
+/plamo-translate-desktop-*-macos-arm64.dmg
+/scripts/__pycache__/

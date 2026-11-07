@@ -853,6 +853,9 @@ impl TranslatorView {
         }
         this._subscriptions.push(cx.on_app_quit(|this, _| {
             this.speech.stop();
+            // GPUI only waits 200 ms for asynchronous quit futures. Join here so
+            // llama.cpp/Metal resources are freed before C++ static destructors.
+            this.worker.shutdown();
             async {}
         }));
         this

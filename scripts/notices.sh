@@ -20,6 +20,11 @@ if [ "$platform" = extension ]; then
     } > "$output"
     exit 0
 fi
+if ! cargo about --version >/dev/null 2>&1; then
+    echo "cargo-about is required to generate third-party notices." >&2
+    echo "Install it with: cargo install cargo-about --locked (macOS: brew install cargo-about)" >&2
+    exit 1
+fi
 # about.toml lists the Windows and Linux targets; the macOS package has its own crate set.
 set --
 if [ "$platform" = macos ]; then
