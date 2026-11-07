@@ -53,15 +53,13 @@ const COPY_TRANSLATION_KEY: &str = "cmd-shift-c";
 #[cfg(not(target_os = "macos"))]
 const COPY_TRANSLATION_KEY: &str = "ctrl-shift-c";
 
-/// Byte offset of the start of the first line visible in `state`.
-fn top_offset(state: &TextareaState) -> Option<usize> {
-    let line_height = state.line_height()?;
-    let row = (-state.scroll_offset().y / line_height).max(0.0) as usize;
+/// Byte offset of the start of a display row (including wrapped rows).
+fn display_offset(state: &TextareaState, row: usize) -> usize {
     let point = state
         .display_map()
         .display_pos_to_buffer_pos(DisplayPoint::new(row, 0));
     let text = state.text();
-    Some((text.line_start_offset(point.line) + point.col).min(text.len()))
+    (text.line_start_offset(point.line) + point.col).min(text.len())
 }
 
 /// The display row (after wrapping) of byte `offset` in `state`.
@@ -2004,16 +2002,39 @@ impl TranslatorView {
         }
     }
 
-    /// Scrolls the other pane so the counterpart of `side`'s first visible line is at its top.
+    /// Interpolate between the mapped starts of adjacent display rows. Retaining
+    /// the fractional row position makes the follower continuous even when one
+    /// source row corresponds to several translated rows.
     fn follow_scroll(&mut self, side: Side, cx: &mut Context<Self>) {
-        let Some(top) = top_offset(self.pane(side).read(cx)) else {
+        let (start, end, fraction) = {
+            let state = self.pane(side).read(cx);
+            let Some(line_height) = state.line_height().filter(|height| *height > px(0.)) else {
+                return;
+            };
+            let row = (-state.scroll_offset().y / line_height).max(0.0);
+            let whole = row.floor() as usize;
+            (
+                display_offset(state, whole),
+                display_offset(state, whole + 1),
+                row.fract(),
+            )
+        };
+        let Some(start) = self.map_offset(side, start) else {
             return;
         };
-        let other = side.other();
-        let Some(target) = self.map_offset(side, top) else {
+        let Some(end) = self.map_offset(side, end) else {
             return;
         };
-        self.scroll_pane(other, target, px(0.), cx);
+        self.pane(side.other()).clone().update(cx, |state, cx| {
+            let Some(line_height) = state.line_height() else {
+                return;
+            };
+            let first = display_row(state, start) as f32;
+            let next = display_row(state, end) as f32;
+            let mut scroll = state.scroll_offset();
+            scroll.y = -(line_height * (first + (next - first) * fraction));
+            state.set_scroll_offset(scroll, cx);
+        });
     }
 
     /// Selects the counterpart of the paragraph holding `side`'s caret in the other pane, and
