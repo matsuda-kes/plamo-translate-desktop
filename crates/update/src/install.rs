@@ -258,12 +258,7 @@ impl Installation {
             if keep && (name == NEW || name == READY) {
                 continue;
             }
-            let path = entry.path();
-            let _ = if path.is_dir() {
-                fs::remove_dir_all(&path)
-            } else {
-                fs::remove_file(&path)
-            };
+            remove_what_can_go(&entry.path());
         }
         let _ = fs::remove_dir(&staging);
         failed
@@ -480,6 +475,24 @@ fn unpack_dmg(image: &Path, dest: &Path) -> Result<(), UpdateError> {
         .arg(&mount));
     let _ = fs::remove_dir(&mount);
     copied.and(detached)
+}
+
+/// Removes `path` and what it holds, as far as it can: on Windows a file in use (the browser host
+/// may still run from an `old-*` folder) cannot be removed, and the rest still goes.
+fn remove_what_can_go(path: &Path) {
+    let Ok(metadata) = fs::symlink_metadata(path) else {
+        return;
+    };
+    if metadata.is_dir() {
+        if let Ok(entries) = fs::read_dir(path) {
+            for entry in entries.flatten() {
+                remove_what_can_go(&entry.path());
+            }
+        }
+        let _ = fs::remove_dir(path);
+    } else {
+        let _ = fs::remove_file(path);
+    }
 }
 
 fn remove_if_exists(path: &Path) -> Result<(), UpdateError> {
