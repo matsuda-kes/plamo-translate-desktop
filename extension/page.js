@@ -51,6 +51,11 @@
   /** Stopped by the user, with paragraphs left that Resume would translate. */
   let stopped = false;
   /**
+   * The box was closed, which ends the page translation: until the page is translated again,
+   * nothing more is sent and the box does not come back.
+   */
+  let closed = false;
+  /**
    * Runs found but not sent yet, by their first node: hidden ones (collapsed sections, menus),
    * and with the panel's setting those far from the view. They are sent when they show or come
    * near (see `recheck`). A run found again (content added to it) replaces the one kept.
@@ -318,6 +323,7 @@
   // ---- Page UI ----
 
   function render(message) {
+    if (closed) return;
     if (!ui) {
       const host = document.createElement("div");
       host.setAttribute("data-plamo", "");
@@ -346,16 +352,14 @@
       ui.resume.onclick = () => start();
       ui.stop.onclick = stop;
       ui.undo.onclick = undo;
-      ui.close.onclick = () => {
-        ui.host.remove();
-        ui = null;
-      };
+      ui.close.onclick = closeBox;
       document.documentElement.append(host);
     }
     // Labelled on each render: the display language may change between page translations.
     ui.stop.textContent = t("stop");
     ui.resume.textContent = t("pageResume");
     ui.undo.textContent = t("pageUndo");
+    ui.close.title = t("pageClose");
     const working = pending.size > 0;
     const progress = working ? t("pageProgress", String(done), String(total)) : t("pageDone", String(done));
     const rate = speed ? ` · ${t("liveSpeed", speed.toFixed(1))}` : "";
@@ -369,6 +373,19 @@
     port?.postMessage({ type: "cancel" });
     stopLocally();
     render(t("pageStopped"));
+  }
+
+  /**
+   * Closes the box and ends the page translation: the paragraphs translated stay, the rest are
+   * not sent, and neither are paragraphs that show or are added later. Otherwise the box would
+   * come back with the next one. Translating the page again starts it again.
+   */
+  function closeBox() {
+    if (pending.size) port?.postMessage({ type: "cancel" });
+    stopLocally();
+    closed = true;
+    ui?.host.remove();
+    ui = null;
   }
 
   /** Forgets the paragraphs waiting, which Resume can send again. */
@@ -598,6 +615,7 @@
 
   async function start() {
     stopped = false;
+    closed = false;
     speed = null;
     const [settings, messages] = await Promise.all([
       chrome.storage.local.get({ target: "auto", style: "", pageMode: "replace", pageMarks: true, pageNearby: false }),

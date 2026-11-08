@@ -99,9 +99,9 @@ Install the app first (see [Download](#download)), then:
    Paragraphs are translated in place, keeping links and formatting: those in view first, and when you scroll, the ones you scrolled to.
    Hidden ones (collapsed sections, menus) wait until they show. **Settings** in the panel can limit it to the paragraphs near the view,
    translating the rest as you scroll to them.
-   A box at the bottom right shows the progress and can stop, resume, or restore the page, and a frame marks the paragraphs being
-   translated (**Settings** in the panel can turn it off). Translating another page stops this one,
-   which can be resumed later.
+   A box at the bottom right shows the progress and can stop, resume, or restore the page; closing it ends the page's translation
+   (what is translated stays). A frame marks the paragraphs being translated (**Settings** in the panel can turn it off).
+   Translating another page stops this one, which can be resumed later.
    **Pages** under **Settings** in the panel shows translations below the original instead.
 
 The extension's texts (the panel, the menus, and the box on the page) follow the browser's language;

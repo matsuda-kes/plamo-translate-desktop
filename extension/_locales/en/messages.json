@@ -257,6 +257,9 @@
   "pageUndo": {
     "message": "Restore"
   },
+  "pageClose": {
+    "message": "Close and stop translating this page"
+  },
   "pageError": {
     "message": "Translation failed: $ERROR$",
     "placeholders": {

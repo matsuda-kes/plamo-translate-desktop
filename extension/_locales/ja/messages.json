@@ -257,6 +257,9 @@
   "pageUndo": {
     "message": "元に戻す"
   },
+  "pageClose": {
+    "message": "閉じて、このページの翻訳を終える"
+  },
   "pageError": {
     "message": "翻訳に失敗しました: $ERROR$",
     "placeholders": {

@@ -557,6 +557,8 @@ or, from v0.4.0, on its own with an in-browser engine (see "In-browser engine" b
     until the tab goes to another site. When the injection fails for want of a host permission, the panel offers the all-sites permission unless it is granted already;
     other failures (browser pages, the extension stores, error pages) say that the page cannot be translated. The notice sits under the page button.
   - Injecting into a page that has `page.js` already starts it again; it sends only runs not sent yet, and shows its box again even when there are none.
+  - Closing the box ends the page translation, like Stop, and also stops watching for runs that show or are added later: otherwise the next
+    translated paragraph would bring the box back. What is translated stays; translating the page again starts it again.
   - The page is cut into runs: consecutive text and inline elements within one block. Code, line breaks, and text marked `translate="no"`
     or `notranslate` stay as they are inside a run; `pre`, form controls, scripts, and similar are skipped, as are Japanese runs for a Japanese target (not for easy Japanese, which rewrites them).
   - A run is sent as simple HTML whose elements carry an index instead of their attributes (`see the <a i="2">guide</a>`).
