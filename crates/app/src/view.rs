@@ -401,6 +401,7 @@ enum UpdateCheck {
 enum InstallState {
     Idle,
     Downloading {
+        version: Version,
         done: u64,
         total: u64,
     },
@@ -500,6 +501,8 @@ pub struct TranslatorView {
     /// This copy's package, if it came from one: it can then install a newer release itself.
     installation: Option<Installation>,
     install: InstallState,
+    /// The start-up clean-up of the staging folder, which an install waits for.
+    clean_up: Option<Task<()>>,
     _install_task: Task<()>,
     copied: bool,
     debounce: Task<()>,
@@ -781,6 +784,7 @@ impl TranslatorView {
             _update_task: Task::ready(()),
             installation: Installation::current().ok(),
             install: InstallState::Idle,
+            clean_up: None,
             _install_task: Task::ready(()),
             copied: false,
             debounce: Task::ready(()),
@@ -2008,7 +2012,7 @@ impl TranslatorView {
             return;
         };
         let current = Version::current();
-        self._install_task = cx.spawn(async move |this, cx| {
+        self.clean_up = Some(cx.spawn(async move |this, cx| {
             let (failed, prepared) = cx
                 .background_spawn(async move {
                     let failed = installation.clean_up(current);
@@ -2016,52 +2020,91 @@ impl TranslatorView {
                 })
                 .await;
             let _ = this.update(cx, |this, cx| {
-                if let Some(error) = failed {
+                if let Some(error) = &failed {
                     crate::app_log!("the last update failed: {error}");
+                }
+                // An install started meanwhile tells its own outcome.
+                if this.install != InstallState::Idle {
+                    return;
+                }
+                if let Some(error) = failed {
                     this.install = InstallState::Failed(error);
                 } else if let Some(version) = prepared {
-                    crate::app_log!("the update to {version} is ready to install");
-                    this.install = InstallState::Ready(version);
+                    // Unless a newer release is known (from the last check): installing then
+                    // prepares that one.
+                    if this
+                        .newer_release
+                        .as_ref()
+                        .is_none_or(|release| release.version <= version)
+                    {
+                        crate::app_log!("the update to {version} is ready to install");
+                        this.install = InstallState::Ready(version);
+                    }
                 }
                 cx.notify();
             });
-        });
+        }));
     }
 
-    /// Downloads the newer release and unpacks it next to the app.
+    /// Downloads the newest release and unpacks it next to the app.
     fn install_update(&mut self, cx: &mut Context<Self>) {
         let (Some(installation), Some(release)) =
-            (self.installation.clone(), self.newer_release.clone())
+            (self.installation.clone(), self.newer_release.as_ref())
         else {
             return;
         };
         if matches!(self.install, InstallState::Downloading { .. }) {
             return;
         }
-        let version = release.version;
-        crate::app_log!(
-            "downloading {} for the update to {version}",
-            installation.asset_name(version)
-        );
-        self.install = InstallState::Downloading { done: 0, total: 0 };
+        self.install = InstallState::Downloading {
+            version: release.version,
+            done: 0,
+            total: 0,
+        };
         cx.notify();
-        let (progress_tx, progress) = async_channel::unbounded();
-        let job = cx.background_spawn(async move {
-            let mut last: Option<Instant> = None;
-            installation.prepare(&release, &mut |done, total| {
-                // Ten times a second is enough for the status bar.
-                if done == total || last.is_none_or(|t| t.elapsed() >= Duration::from_millis(100)) {
-                    last = Some(Instant::now());
-                    let _ = progress_tx.try_send((done, total));
-                }
-            })
-        });
+        let clean_up = self.clean_up.take();
         self._install_task = cx.spawn(async move |this, cx| {
+            // The start-up clean-up works in the same folder.
+            if let Some(clean_up) = clean_up {
+                clean_up.await;
+            }
+            let (progress_tx, progress) = async_channel::unbounded();
+            let job = cx.background_spawn(async move {
+                // The check's answer may be a day old: the files are taken as they are now.
+                let release = update::latest()?;
+                let current = Version::current();
+                if release.version <= current {
+                    return Err(update::UpdateError::Format(format!(
+                        "the newest release, {}, is not newer than {current}",
+                        release.version
+                    )));
+                }
+                let version = release.version;
+                crate::app_log!(
+                    "downloading {} for the update to {version}",
+                    installation.asset_name(version)
+                );
+                let mut last: Option<Instant> = None;
+                installation.prepare(&release, &mut |done, total| {
+                    // Ten times a second is enough for the status bar.
+                    if done == total
+                        || last.is_none_or(|t| t.elapsed() >= Duration::from_millis(100))
+                    {
+                        last = Some(Instant::now());
+                        let _ = progress_tx.try_send((version, done, total));
+                    }
+                })?;
+                Ok(version)
+            });
             // Ends when the job does: it holds the sender.
-            while let Ok((done, total)) = progress.recv().await {
+            while let Ok((version, done, total)) = progress.recv().await {
                 let _ = this.update(cx, |this, cx| {
                     if let InstallState::Downloading { .. } = this.install {
-                        this.install = InstallState::Downloading { done, total };
+                        this.install = InstallState::Downloading {
+                            version,
+                            done,
+                            total,
+                        };
                         cx.notify();
                     }
                 });
@@ -2069,12 +2112,12 @@ impl TranslatorView {
             let result = job.await;
             let _ = this.update(cx, |this, cx| {
                 this.install = match result {
-                    Ok(()) => {
+                    Ok(version) => {
                         crate::app_log!("the update to {version} is ready to install");
                         InstallState::Ready(version)
                     }
                     Err(e) => {
-                        crate::app_log!("the update to {version} failed: {e}");
+                        crate::app_log!("the update failed: {e}");
                         InstallState::Failed(e.to_string())
                     }
                 };
@@ -2452,13 +2495,20 @@ impl Render for TranslatorView {
                     .label(t!("update.restart", version = version.to_string()).into_owned())
                     .on_click(cx.listener(|this, _, _, cx| this.restart_to_update(cx))),
             ),
-            (InstallState::Downloading { done, total }, Some(release)) => {
+            (
+                InstallState::Downloading {
+                    version,
+                    done,
+                    total,
+                },
+                _,
+            ) => {
                 let percent = (*done * 100).checked_div(*total).unwrap_or(0);
                 Some(
                     Button::new("update").ghost().xsmall().loading(true).label(
                         t!(
                             "update.downloading",
-                            version = release.version.to_string(),
+                            version = version.to_string(),
                             percent = percent.to_string()
                         )
                         .into_owned(),

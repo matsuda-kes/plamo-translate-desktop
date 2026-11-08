@@ -228,7 +228,7 @@ NPU 向けにコンパイルしたグラフ（`openvino-cache/`）は次の場�
 ログには、起動、検出したデバイス、モデルの読み込み、ダウンロード、削除、設定の変更、長い文章のやり直しや打ち切りの位置を記録します。翻訳した文章は記録しません。
 起動時に 1 MiB を超えていたら `app.log.1` に退避します。
 
-更新は、アプリのフォルダの `update`（macOS ではアプリの隣の `.plamo-translate-update`）に用意し、次の起動のときに片づけます。
+更新は、アプリのフォルダの `update`（macOS ではアプリの隣の隠しフォルダ `.PLaMo Translate Desktop-update`）に用意し、次の起動のときに片づけます。
 
 設定は `settings.json` に保存します。場所は、Windows では `%APPDATA%\plamo-translate-desktop\config`、Linux では `~/.config/plamo-translate-desktop`（`$XDG_CONFIG_HOME`）、macOS では上のデータの場所です。
 

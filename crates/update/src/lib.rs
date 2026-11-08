@@ -28,7 +28,7 @@ pub const API_URL_VAR: &str = "PLAMO_TRANSLATE_UPDATE_URL";
 /// How often the app asks GitHub at most.
 pub const CHECK_INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
 
-pub(crate) const USER_AGENT: &str = concat!("plamo-translate-desktop/", env!("CARGO_PKG_VERSION"));
+const USER_AGENT: &str = concat!("plamo-translate-desktop/", env!("CARGO_PKG_VERSION"));
 
 /// A release's version, `major.minor.patch` (the tags are `v` and the same).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -140,12 +140,7 @@ pub enum UpdateError {
 pub fn latest() -> Result<Release, UpdateError> {
     let url = std::env::var(API_URL_VAR)
         .unwrap_or_else(|_| format!("https://api.github.com/repos/{REPOSITORY}/releases/latest"));
-    let agent: ureq::Agent = ureq::Agent::config_builder()
-        .timeout_global(Some(Duration::from_secs(30)))
-        .user_agent(USER_AGENT)
-        .build()
-        .into();
-    let body = agent
+    let body = agent()
         .get(&url)
         .header("Accept", "application/vnd.github+json")
         .header("X-GitHub-Api-Version", "2022-11-28")
@@ -238,7 +233,19 @@ impl CheckCache {
     }
 }
 
-fn unix_seconds(time: SystemTime) -> u64 {
+/// For GitHub's API and its downloads. No overall limit, which a download would outlast; a
+/// stalled connection still ends with the per-read one.
+pub(crate) fn agent() -> ureq::Agent {
+    ureq::Agent::config_builder()
+        .timeout_connect(Some(Duration::from_secs(20)))
+        .timeout_recv_response(Some(Duration::from_secs(60)))
+        .timeout_per_read(Some(Duration::from_secs(30)))
+        .user_agent(USER_AGENT)
+        .build()
+        .into()
+}
+
+pub(crate) fn unix_seconds(time: SystemTime) -> u64 {
     time.duration_since(SystemTime::UNIX_EPOCH)
         .map_or(0, |d| d.as_secs())
 }

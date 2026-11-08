@@ -506,15 +506,20 @@ instead of being overwritten.
   - Each package has `package.json` (`scripts/package-marker.py`, run by the release jobs once the folder is complete): its kind
     (`windows-x86_64`, `windows-x86_64-intel-npu`, `linux-x86_64`, `macos-arm64`) and its top-level entries. A build from source has none,
     and only links to the release page. The macOS app has it in `Contents/Resources`, with no entries: the app is replaced as a whole.
-  - Clicking the status bar's notice opens a dialog; **Download and update** fetches the package of the same kind and `SHA256SUMS.txt`
-    from the release, checks the digest, and unpacks it into a staging folder on the installation's volume: `update/new` in the app's
-    folder, or `.plamo-translate-update/new` next to the macOS app (`hdiutil attach`, then `ditto`). Archive paths that could leave
-    the folder, and links, are refused. `ready.json` there records the version, so a prepared update survives a restart of the app.
+  - Clicking the status bar's notice opens a dialog; **Download and update** asks GitHub again (the check's answer may be a day old),
+    fetches the newest release's package of the same kind and `SHA256SUMS.txt`, checks the digest, and unpacks it into a staging folder
+    on the installation's volume: `update/new` in the app's folder, or next to the macOS app a hidden folder named after it
+    (`.PLaMo Translate Desktop-update/new`, so that copies of the app side by side do not share it; `hdiutil attach`, then `ditto`).
+    Archive paths that could leave the folder, and links, are refused. `ready.json` there records the version, so a prepared update
+    survives a restart of the app, unless the last check knows a newer release. It waits for the start-up clean-up of that folder.
+  - The executable's path is canonicalized without the `\\?\` prefix Windows gives it: the new version is started with that path, and
+    the browser host's registration is compared with paths derived from it.
   - **Restart to update** writes `plan.json` and starts the new version's executable from the staging folder with `--apply-update`, its
     standard input a pipe from the app, then quits. The running app cannot replace its own files on Windows; the new executable waits for
-    that pipe to close (the app has exited; at most 60 s), moves the old package's entries into `old-<time>` and the new ones into place
+    that pipe to close (the app has exited), moves the old package's entries into `old-<time>` and the new ones into place
     (retrying for a few seconds while a scanner holds a file), puts everything back if a step fails (recorded in `failed.txt`, which the
-    app reports), and starts the app. Only the package's entries move, so files the user put in the folder stay. Renaming works on files
+    app reports), and starts the app. If the app has not exited after a minute, nothing is swapped or started: renaming a running app's
+    files would work and leave two copies running. A plan that cannot be read is recorded too, and the app is started again as it was. Only the package's entries move, so files the user put in the folder stay. Renaming works on files
     in use on Windows, so a browser host still running the old files does not block it. The next start removes the staging folder, or
     leaves what is still in use for later.
   - `plan.json` is written by one version and read by the next, so its fields are only ever added.

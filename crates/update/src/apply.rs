@@ -4,9 +4,9 @@
 //! new version's executable from the staging folder with `--apply-update <plan>` ([`start`]),
 //! then quits. That process waits until the app has exited (its standard input, a pipe from the
 //! app, closes), moves the installation's entries into an `old-*` folder and the new ones into
-//! place, puts everything back if a step fails, and starts the app ([`run_if_asked`]). Renaming
-//! works on files in use on Windows too, so a browser host still running from the old files does
-//! not stop it; the next start removes the `old-*` folder once nothing uses it.
+//! place, puts everything back if a step fails, and starts the app ([`requested`], [`run`]).
+//! Renaming works on files in use on Windows too, so a browser host still running from the old
+//! files does not stop it; the next start removes the `old-*` folder once nothing uses it.
 
 use std::fs;
 use std::io::Read;
@@ -14,6 +14,8 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::mpsc;
 use std::time::{Duration, SystemTime};
+
+use crate::unix_seconds;
 
 use serde::{Deserialize, Serialize};
 
@@ -27,7 +29,8 @@ pub const APPLY_ARG: &str = "--apply-update";
 
 const PLAN: &str = "plan.json";
 
-/// How long the new version waits for the app to exit before it goes ahead anyway.
+/// How long the new version waits for the app to exit. After that it swaps nothing: renaming the
+/// files of a running app would work, and leave two copies of it running.
 const PARENT_WAIT: Duration = Duration::from_secs(60);
 
 /// What the new version's executable does once the app has exited. One version writes it and
@@ -54,10 +57,7 @@ impl Installation {
     pub fn plan(&self) -> Result<(Plan, PathBuf), UpdateError> {
         let staging = self.staging();
         let new = self.new_dir();
-        let stamp = SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .map_or(0, |d| d.as_secs());
-        let old = staging.join(format!("old-{stamp}"));
+        let old = staging.join(format!("old-{}", unix_seconds(SystemTime::now())));
         let executable = self
             .executable
             .file_name()
@@ -135,27 +135,34 @@ pub fn start(installation: &Installation) -> Result<(), UpdateError> {
     Ok(())
 }
 
-/// Carries out a plan when this process was started for it (`--apply-update <plan>`), then
-/// starts the app. The app calls this first thing; `None` means it was started normally.
-pub fn run_if_asked() -> Option<Result<(), UpdateError>> {
+/// The plan this process was started to carry out (`--apply-update <plan>`), if it was: the app
+/// asks first thing, and then only calls [`run`].
+pub fn requested() -> Option<PathBuf> {
     let mut args = std::env::args_os().skip(1);
-    if args.next()? != APPLY_ARG {
-        return None;
-    }
-    let Some(path) = args.next() else {
-        return Some(Err(UpdateError::Format(format!(
-            "{APPLY_ARG} needs a plan"
-        ))));
-    };
-    Some(run(Path::new(&path)))
+    (args.next()? == APPLY_ARG).then(|| PathBuf::from(args.next().unwrap_or_default()))
 }
 
-fn run(path: &Path) -> Result<(), UpdateError> {
-    let json = fs::read_to_string(path).map_err(|e| io_error(path, e))?;
-    let plan: Plan =
-        serde_json::from_str(&json).map_err(|e| UpdateError::Format(format!("plan: {e}")))?;
-    wait_for_parent(PARENT_WAIT);
-    let result = swap(&plan);
+/// Carries out the plan at `path` once the app has exited, then starts the app.
+pub fn run(path: &Path) -> Result<(), UpdateError> {
+    let plan = match read_plan(path) {
+        Ok(plan) => plan,
+        Err(e) => {
+            // Nothing can be swapped: the app starts as it was, and reports the failure.
+            let _ = fs::write(path.with_file_name(FAILED), e.to_string());
+            if wait_for_parent(PARENT_WAIT) {
+                launch(&fallback_launch(path));
+            }
+            return Err(e);
+        }
+    };
+    let exited = wait_for_parent(PARENT_WAIT);
+    let result = if exited {
+        swap(&plan)
+    } else {
+        Err(UpdateError::Io(
+            "the app did not exit within a minute".into(),
+        ))
+    };
     match &result {
         Ok(()) => {
             for path in &plan.done {
@@ -166,7 +173,33 @@ fn run(path: &Path) -> Result<(), UpdateError> {
             let _ = fs::write(&plan.failed, e.to_string());
         }
     }
-    if let Some((program, args)) = plan.launch.split_first() {
+    // The app, new or (after a failure) old; not a second copy while the old one still runs.
+    if exited {
+        launch(&plan.launch);
+    }
+    result
+}
+
+fn read_plan(path: &Path) -> Result<Plan, UpdateError> {
+    let json = fs::read_to_string(path).map_err(|e| io_error(path, e))?;
+    serde_json::from_str(&json).map_err(|e| UpdateError::Format(format!("plan: {e}")))
+}
+
+/// What to start when the plan cannot be read: the executable of the same name in the folder
+/// holding the staging folder (Windows and Linux). On macOS the app is not known, and nothing is.
+fn fallback_launch(plan: &Path) -> Vec<PathBuf> {
+    let root = plan.parent().and_then(Path::parent);
+    let name = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.file_name().map(ToOwned::to_owned));
+    match (root, name) {
+        (Some(root), Some(name)) if root.join(&name).is_file() => vec![root.join(name)],
+        _ => Vec::new(),
+    }
+}
+
+fn launch(command: &[PathBuf]) {
+    if let Some((program, args)) = command.split_first() {
         let _ = Command::new(program)
             .args(args)
             .stdin(Stdio::null())
@@ -174,18 +207,17 @@ fn run(path: &Path) -> Result<(), UpdateError> {
             .stderr(Stdio::null())
             .spawn();
     }
-    result
 }
 
 /// Waits until standard input closes (the app that started this process has exited), at most
-/// `limit`.
-fn wait_for_parent(limit: Duration) {
+/// `limit`. Returns whether it closed.
+fn wait_for_parent(limit: Duration) -> bool {
     let (tx, rx) = mpsc::channel();
     std::thread::spawn(move || {
         let _ = std::io::stdin().read_to_end(&mut Vec::new());
         let _ = tx.send(());
     });
-    let _ = rx.recv_timeout(limit);
+    rx.recv_timeout(limit).is_ok()
 }
 
 /// Moves the old entries out and the new ones in; after a failure, puts back what was moved.

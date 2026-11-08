@@ -9,12 +9,11 @@
 use std::fs::{self, File};
 use std::io::{self, Read, Write};
 use std::path::{Component, Path, PathBuf};
-use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::{Release, USER_AGENT, UpdateError, Version};
+use crate::{Release, UpdateError, Version, agent};
 
 /// The file the release workflow puts in each package: next to the executables, or in
 /// `Contents/Resources` of the macOS app.
@@ -77,7 +76,7 @@ impl Installation {
         let exe = std::env::current_exe()
             .and_then(|exe| exe.canonicalize())
             .map_err(|e| UpdateError::Io(format!("cannot find the running executable: {e}")))?;
-        Self::of_executable(&exe, cfg!(target_os = "macos"))
+        Self::of_executable(&plain(exe), cfg!(target_os = "macos"))
     }
 
     /// The installation of `exe`, laid out as on macOS (inside an app bundle) or not.
@@ -137,13 +136,16 @@ impl Installation {
         format!("plamo-translate-desktop-{version}-{kind}.{extension}")
     }
 
-    /// Where an update is prepared: `update` in the app's folder, or a hidden folder next to the
-    /// macOS app. On the same volume as the installation, so that the swap only renames.
+    /// Where an update is prepared: `update` in the app's folder, or next to the macOS app a
+    /// hidden folder named after it (other copies of the app may share that folder). On the same
+    /// volume as the installation, so that the swap only renames.
     pub fn staging(&self) -> PathBuf {
-        if self.is_macos() {
-            self.root.join(".plamo-translate-update")
-        } else {
-            self.root.join("update")
+        match &self.bundle {
+            Some(bundle) => {
+                let name = bundle.file_stem().unwrap_or_default().to_string_lossy();
+                self.root.join(format!(".{name}-update"))
+            }
+            None => self.root.join("update"),
         }
     }
 
@@ -270,6 +272,24 @@ struct Ready {
     version: Version,
 }
 
+/// `path` without the `\\?\` prefix that `canonicalize` gives on Windows. The app starts the new
+/// version with it, and a path written so would not compare equal to the same one written plainly,
+/// as in the browser host's registration. Other paths (`\\?\UNC\…`, other systems) are kept.
+fn plain(path: PathBuf) -> PathBuf {
+    if cfg!(windows)
+        && let Some(rest) = path.to_str().and_then(without_verbatim_prefix)
+    {
+        return PathBuf::from(rest);
+    }
+    path
+}
+
+/// `C:\…` from `\\?\C:\…`; `None` for anything else.
+fn without_verbatim_prefix(path: &str) -> Option<&str> {
+    let rest = path.strip_prefix(r"\\?\")?;
+    (rest.as_bytes().get(1) == Some(&b':')).then_some(rest)
+}
+
 /// The app bundle in an unpacked macOS package.
 pub(crate) fn new_bundle(new: &Path) -> Result<PathBuf, UpdateError> {
     fs::read_dir(new)
@@ -278,16 +298,6 @@ pub(crate) fn new_bundle(new: &Path) -> Result<PathBuf, UpdateError> {
         .map(|entry| entry.path())
         .find(|path| path.extension().is_some_and(|ext| ext == "app") && path.is_dir())
         .ok_or_else(|| UpdateError::Format("the disk image has no app".into()))
-}
-
-pub(crate) fn agent() -> ureq::Agent {
-    ureq::Agent::config_builder()
-        .timeout_connect(Some(Duration::from_secs(20)))
-        .timeout_recv_response(Some(Duration::from_secs(60)))
-        .timeout_per_read(Some(Duration::from_secs(30)))
-        .user_agent(USER_AGENT)
-        .build()
-        .into()
 }
 
 /// The checksum `SHA256SUMS.txt` gives for `name` (`<hex>  <name>` lines).
@@ -567,8 +577,22 @@ mod tests {
         );
         assert_eq!(
             found.staging(),
-            dir.path().join("Applications/.plamo-translate-update")
+            dir.path().join("Applications/.PLaMo-update")
         );
+    }
+
+    #[test]
+    fn drops_the_verbatim_prefix_of_drive_paths_only() {
+        assert_eq!(
+            without_verbatim_prefix(r"\\?\E:\apps\plamo\app.exe"),
+            Some(r"E:\apps\plamo\app.exe")
+        );
+        assert_eq!(
+            without_verbatim_prefix(r"\\?\UNC\server\share\app.exe"),
+            None
+        );
+        assert_eq!(without_verbatim_prefix(r"E:\apps\app.exe"), None);
+        assert_eq!(without_verbatim_prefix("/usr/bin/app"), None);
     }
 
     #[test]

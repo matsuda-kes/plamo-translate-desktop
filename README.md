@@ -234,7 +234,7 @@ and the NPU's compiled graphs (`openvino-cache/`) are kept in:
 The log records start-up, detected devices, model loads, downloads, deletions, settings changes, and where long texts were retried or cut, but never translated text.
 A log larger than 1 MiB is moved to `app.log.1` at start-up.
 
-An update is prepared in `update` in the app's folder (on macOS, `.plamo-translate-update` next to the app), which the next start removes.
+An update is prepared in `update` in the app's folder (on macOS, a hidden folder next to the app, `.PLaMo Translate Desktop-update`), which the next start removes.
 
 Settings are in `settings.json`: `%APPDATA%\plamo-translate-desktop\config` on Windows, `~/.config/plamo-translate-desktop` (`$XDG_CONFIG_HOME`) on Linux,
 and the data folder above on macOS.
