@@ -183,6 +183,8 @@ jobs:
           env -u LD_LIBRARY_PATH "$dist/translate" --list-devices
           rm "$dist/translate"
           env -u LD_LIBRARY_PATH "$dist/plamo-translate-host" --check
+          # What the app needs to update itself, once the folder is complete.
+          python3 scripts/package-marker.py "$dist" linux-x86_64
           tar -C dist -czf "$PACKAGE.tar.gz" "$PACKAGE"
 
       - uses: actions/upload-artifact@v7
@@ -397,6 +399,9 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "plamo-translate-host.exe failed with exit code $LASTEXITCODE" }
           New-Item -ItemType Directory -Force cli | Out-Null
           Move-Item "$dist\translate.exe" cli
+          # What the app needs to update itself, once the folder is complete.
+          python scripts\package-marker.py $dist windows-x86_64
+          if ($LASTEXITCODE -ne 0) { throw "package-marker.py failed" }
           Compress-Archive -Path $dist -DestinationPath "$env:PACKAGE.zip"
 
       - uses: actions/upload-artifact@v7
@@ -440,6 +445,9 @@ jobs:
           Remove-Item "$npu\translate.exe"
           & "$npu\plamo-translate-host.exe" --check
           if ($LASTEXITCODE -ne 0) { throw "plamo-translate-host.exe failed with exit code $LASTEXITCODE" }
+          # Its own kind and entries, in place of the copied package's.
+          python scripts\package-marker.py $npu windows-x86_64-intel-npu
+          if ($LASTEXITCODE -ne 0) { throw "package-marker.py failed" }
           Compress-Archive -Path $npu -DestinationPath "$env:NPU_PACKAGE.zip"
 
       - uses: actions/upload-artifact@v7

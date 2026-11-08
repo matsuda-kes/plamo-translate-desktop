@@ -484,6 +484,9 @@ settings.check_updates_note:
 settings.check_now:
   en: Check now
   ja: 今すぐ確認
+settings.version:
+  en: "Version %{version}"
+  ja: "バージョン %{version}"
 settings.update_checking:
   en: Checking…
   ja: 確認しています…
@@ -499,6 +502,36 @@ update.available:
 update.open_page:
   en: Open the release page
   ja: リリースのページを開く
+update.title:
+  en: "Update to %{version}"
+  ja: "%{version} に更新"
+update.body:
+  en: "Downloads the new version and puts it next to this copy of the app. Once it is ready, the button in the status bar restarts the app into the new version."
+  ja: "新しい版をダウンロードして、このアプリの隣に用意します。用意ができたら、ステータスバーのボタンでアプリを再起動すると、新しい版に入れ替わります。"
+update.manual:
+  en: "This copy was not installed from a release package, so it cannot update itself. Download the new version from the release page."
+  ja: "このアプリはリリースのパッケージから入れたものではないため、自動では更新できません。リリースのページから新しい版をダウンロードしてください。"
+update.last_failed:
+  en: "The last attempt failed: %{error}"
+  ja: "前回は失敗しました: %{error}"
+update.notes:
+  en: See what is new
+  ja: 変更点を見る
+update.download:
+  en: Download and update
+  ja: ダウンロードして更新
+update.later:
+  en: Later
+  ja: あとで
+update.downloading:
+  en: "Downloading %{version}… %{percent}%"
+  ja: "%{version} をダウンロードしています… %{percent}%"
+update.restart:
+  en: "Restart to update to %{version}"
+  ja: "再起動して %{version} に更新"
+update.failed:
+  en: "Could not update to %{version}"
+  ja: "%{version} に更新できませんでした"
 settings.tokens:
   en: "%{count} tokens"
   ja: "%{count} トークン"

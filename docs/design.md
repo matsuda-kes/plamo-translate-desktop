@@ -495,16 +495,30 @@ instead of being overwritten.
   - Build caches are keyed on the rustc version. A tag can restore only its own caches and those of the default branch,
     so a manual run on `main` before tagging makes the release build warm.
 - Windows-specific behaviour (DirectX rendering, IME, Vulkan performance on real hardware) is checked by running Release artifacts on the Windows host.
-- New versions (from v0.5.0; crate `update`):
+- Updates (from v0.5.0; crate `update`):
   - At start, unless turned off in Settings, the app shows a newer release found before and, once a day has passed since the last check
     (or the clock was set back), asks the GitHub API for the newest release (`releases/latest`, which leaves out drafts and pre-releases).
     The answer is kept in `update.json` in the data folder. A newer version shows in the status bar, linked to the release page.
     Settings' **Check now** asks at once and shows the result there. Failures are only logged; the next start asks again.
   - Versions are `major.minor.patch`, compared as numbers; tags are `v` and the same.
   - `PLAMO_TRANSLATE_UPDATE_URL` replaces the API address, for tests against a local server;
-    `cargo run -p update --example latest` prints what the check finds.
-  - Planned: installing the new version from the app (the package's files, verified with `SHA256SUMS.txt`, unpacked next to the app
-    and swapped in on restart), and the extension's panel reloading the extension once the app's copy of it is newer.
+    `cargo run -p update --example latest` prints what the check finds, and `--example install -- <executable>` installs it as the app does.
+  - Each package has `package.json` (`scripts/package-marker.py`, run by the release jobs once the folder is complete): its kind
+    (`windows-x86_64`, `windows-x86_64-intel-npu`, `linux-x86_64`, `macos-arm64`) and its top-level entries. A build from source has none,
+    and only links to the release page. The macOS app has it in `Contents/Resources`, with no entries: the app is replaced as a whole.
+  - Clicking the status bar's notice opens a dialog; **Download and update** fetches the package of the same kind and `SHA256SUMS.txt`
+    from the release, checks the digest, and unpacks it into a staging folder on the installation's volume: `update/new` in the app's
+    folder, or `.plamo-translate-update/new` next to the macOS app (`hdiutil attach`, then `ditto`). Archive paths that could leave
+    the folder, and links, are refused. `ready.json` there records the version, so a prepared update survives a restart of the app.
+  - **Restart to update** writes `plan.json` and starts the new version's executable from the staging folder with `--apply-update`, its
+    standard input a pipe from the app, then quits. The running app cannot replace its own files on Windows; the new executable waits for
+    that pipe to close (the app has exited; at most 60 s), moves the old package's entries into `old-<time>` and the new ones into place
+    (retrying for a few seconds while a scanner holds a file), puts everything back if a step fails (recorded in `failed.txt`, which the
+    app reports), and starts the app. Only the package's entries move, so files the user put in the folder stay. Renaming works on files
+    in use on Windows, so a browser host still running the old files does not block it. The next start removes the staging folder, or
+    leaves what is still in use for later.
+  - `plan.json` is written by one version and read by the next, so its fields are only ever added.
+  - Settings shows the app's version next to **Check now**.
 - Icon: a white block "p" on a blue rounded tile, after the PLaMo logo. `scripts/gen_icons.py` produces `assets/icon/`
   (SVG, a 256 px PNG, and a multi-size `.ico`) using only the Python standard library.
   On Windows, `crates/app/build.rs` embeds the icon as resource ID 1, which GPUI loads for its windows.

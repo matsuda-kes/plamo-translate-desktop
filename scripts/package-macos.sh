@@ -121,6 +121,9 @@ cat > "$app/Contents/Info.plist" <<EOF
 EOF
 plutil -lint "$app/Contents/Info.plist"
 
+# What the app needs to update itself; inside the bundle, so before it is signed.
+python3 scripts/package-marker.py "$app/Contents/Resources" macos-arm64 --no-entries
+
 # Nested code first, then the bundle. Notarization, which takes a Developer ID, also needs the
 # hardened runtime and a secure timestamp.
 if [ "$identity" = - ]; then

@@ -25,7 +25,7 @@ use gpui_kit::component::{
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
 use rust_i18n::t;
-use update::{CheckCache, Release, Version};
+use update::{CheckCache, Installation, Release, Version};
 
 use crate::align::{Alignment, ChunkSpan, Side};
 use crate::backend::{self, BackendEvent, BackendPanel};
@@ -103,7 +103,7 @@ fn token_choices(document: &DocumentSettings) -> (Vec<Choice<usize>>, Vec<Choice
     )
 }
 
-/// The settings' Check now button, and what it found.
+/// This build's version, the settings' Check now button, and what it found.
 fn update_check_row(
     check: UpdateCheck,
     muted: Hsla,
@@ -122,6 +122,11 @@ fn update_check_row(
     h_flex()
         .gap_3()
         .items_center()
+        .child(
+            div().text_sm().child(
+                t!("settings.version", version = Version::current().to_string()).into_owned(),
+            ),
+        )
         .child(
             Button::new("check-now")
                 .small()
@@ -391,6 +396,19 @@ enum UpdateCheck {
     Failed(String),
 }
 
+/// Installing a newer release from the app.
+#[derive(Debug, Clone, PartialEq)]
+enum InstallState {
+    Idle,
+    Downloading {
+        done: u64,
+        total: u64,
+    },
+    /// Unpacked next to the app: a restart swaps it in.
+    Ready(Version),
+    Failed(String),
+}
+
 pub struct TranslatorView {
     source: Entity<TextareaState>,
     output: Entity<TextareaState>,
@@ -479,6 +497,10 @@ pub struct TranslatorView {
     newer_release: Option<Release>,
     update_check: UpdateCheck,
     _update_task: Task<()>,
+    /// This copy's package, if it came from one: it can then install a newer release itself.
+    installation: Option<Installation>,
+    install: InstallState,
+    _install_task: Task<()>,
     copied: bool,
     debounce: Task<()>,
     copied_reset: Task<()>,
@@ -757,6 +779,9 @@ impl TranslatorView {
             newer_release: None,
             update_check: UpdateCheck::Idle,
             _update_task: Task::ready(()),
+            installation: Installation::current().ok(),
+            install: InstallState::Idle,
+            _install_task: Task::ready(()),
             copied: false,
             debounce: Task::ready(()),
             copied_reset: Task::ready(()),
@@ -764,6 +789,7 @@ impl TranslatorView {
             _events: events,
         };
         this.link_selection_focus(cx);
+        this.clean_up_update(cx);
         if this.settings.check_updates {
             this.check_for_update(false, cx);
         }
@@ -1954,6 +1980,11 @@ impl TranslatorView {
                         if now || this.settings.check_updates {
                             this.newer_release = newer.then_some(release);
                         }
+                        // A version prepared earlier is superseded: the next install
+                        // prepares this one.
+                        if matches!(this.install, InstallState::Ready(ready) if ready < version) {
+                            this.install = InstallState::Idle;
+                        }
                         if newer {
                             UpdateCheck::Found(version)
                         } else {
@@ -1967,6 +1998,182 @@ impl TranslatorView {
                 };
                 cx.notify();
             });
+        });
+    }
+
+    /// Removes what an update left next to the app, and picks up one prepared earlier or the
+    /// failure of the last one.
+    fn clean_up_update(&mut self, cx: &mut Context<Self>) {
+        let Some(installation) = self.installation.clone() else {
+            return;
+        };
+        let current = Version::current();
+        self._install_task = cx.spawn(async move |this, cx| {
+            let (failed, prepared) = cx
+                .background_spawn(async move {
+                    let failed = installation.clean_up(current);
+                    (failed, installation.prepared(current))
+                })
+                .await;
+            let _ = this.update(cx, |this, cx| {
+                if let Some(error) = failed {
+                    crate::app_log!("the last update failed: {error}");
+                    this.install = InstallState::Failed(error);
+                } else if let Some(version) = prepared {
+                    crate::app_log!("the update to {version} is ready to install");
+                    this.install = InstallState::Ready(version);
+                }
+                cx.notify();
+            });
+        });
+    }
+
+    /// Downloads the newer release and unpacks it next to the app.
+    fn install_update(&mut self, cx: &mut Context<Self>) {
+        let (Some(installation), Some(release)) =
+            (self.installation.clone(), self.newer_release.clone())
+        else {
+            return;
+        };
+        if matches!(self.install, InstallState::Downloading { .. }) {
+            return;
+        }
+        let version = release.version;
+        crate::app_log!(
+            "downloading {} for the update to {version}",
+            installation.asset_name(version)
+        );
+        self.install = InstallState::Downloading { done: 0, total: 0 };
+        cx.notify();
+        let (progress_tx, progress) = async_channel::unbounded();
+        let job = cx.background_spawn(async move {
+            let mut last: Option<Instant> = None;
+            installation.prepare(&release, &mut |done, total| {
+                // Ten times a second is enough for the status bar.
+                if done == total || last.is_none_or(|t| t.elapsed() >= Duration::from_millis(100)) {
+                    last = Some(Instant::now());
+                    let _ = progress_tx.try_send((done, total));
+                }
+            })
+        });
+        self._install_task = cx.spawn(async move |this, cx| {
+            // Ends when the job does: it holds the sender.
+            while let Ok((done, total)) = progress.recv().await {
+                let _ = this.update(cx, |this, cx| {
+                    if let InstallState::Downloading { .. } = this.install {
+                        this.install = InstallState::Downloading { done, total };
+                        cx.notify();
+                    }
+                });
+            }
+            let result = job.await;
+            let _ = this.update(cx, |this, cx| {
+                this.install = match result {
+                    Ok(()) => {
+                        crate::app_log!("the update to {version} is ready to install");
+                        InstallState::Ready(version)
+                    }
+                    Err(e) => {
+                        crate::app_log!("the update to {version} failed: {e}");
+                        InstallState::Failed(e.to_string())
+                    }
+                };
+                cx.notify();
+            });
+        });
+    }
+
+    /// Quits, and has the prepared version swap itself in and start.
+    fn restart_to_update(&mut self, cx: &mut Context<Self>) {
+        let InstallState::Ready(version) = self.install else {
+            return;
+        };
+        let Some(installation) = &self.installation else {
+            return;
+        };
+        match update::apply::start(installation) {
+            Ok(()) => {
+                crate::app_log!("quitting to install the update to {version}");
+                cx.quit();
+            }
+            Err(e) => {
+                crate::app_log!("cannot start the update to {version}: {e}");
+                self.install = InstallState::Failed(e.to_string());
+                cx.notify();
+            }
+        }
+    }
+
+    /// The newer release: what installing it does, its notes, and the button that starts it.
+    fn open_update(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(release) = self.newer_release.clone() else {
+            return;
+        };
+        let installable = self.installation.is_some();
+        let failure = match &self.install {
+            InstallState::Failed(error) => Some(error.clone()),
+            _ => None,
+        };
+        let view = cx.entity().downgrade();
+        window.open_dialog(cx, move |dialog, _, cx| {
+            let muted = cx.theme().muted_foreground;
+            let page = release.page.clone();
+            let notes_page = page.clone();
+            let install_view = view.clone();
+            let primary = if installable {
+                Button::new("update-install")
+                    .primary()
+                    .label(t!("update.download").into_owned())
+                    .on_click(move |_, window, cx| {
+                        window.close_dialog(cx);
+                        let _ = install_view.update(cx, |this, cx| this.install_update(cx));
+                    })
+            } else {
+                Button::new("update-page")
+                    .primary()
+                    .label(t!("update.open_page").into_owned())
+                    .on_click(move |_, window, cx| {
+                        window.close_dialog(cx);
+                        cx.open_url(&page);
+                    })
+            };
+            dialog
+                .title(t!("update.title", version = release.version.to_string()).into_owned())
+                .w(px(520.))
+                .child(
+                    v_flex()
+                        .gap_3()
+                        .text_sm()
+                        .child(if installable {
+                            t!("update.body").into_owned()
+                        } else {
+                            t!("update.manual").into_owned()
+                        })
+                        .children(failure.clone().map(|error| {
+                            div()
+                                .text_xs()
+                                .text_color(muted)
+                                .child(t!("update.last_failed", error = error).into_owned())
+                        }))
+                        .child(
+                            Button::new("update-notes")
+                                .link()
+                                .label(t!("update.notes").into_owned())
+                                .on_click(move |_, _, cx| cx.open_url(&notes_page)),
+                        ),
+                )
+                .footer(
+                    h_flex()
+                        .w_full()
+                        .justify_end()
+                        .gap_2()
+                        .child(
+                            Button::new("update-later")
+                                .label(t!("update.later").into_owned())
+                                .on_click(|_, window, cx| window.close_dialog(cx)),
+                        )
+                        .child(primary),
+                )
         });
     }
 
@@ -2236,16 +2443,46 @@ impl Render for TranslatorView {
             .icon(IconName::Settings)
             .tooltip(t!("settings.title").into_owned())
             .on_click(cx.listener(|this, _, window, cx| this.open_settings(window, cx)));
-        let update_button = self.newer_release.as_ref().map(|release| {
-            let page = release.page.clone();
-            Button::new("update")
-                .ghost()
-                .xsmall()
-                .icon(Lucide::CircleArrowUp)
-                .label(t!("update.available", version = release.version.to_string()).into_owned())
-                .tooltip(t!("update.open_page").into_owned())
-                .on_click(move |_, _, cx| cx.open_url(&page))
-        });
+        let update_button = match (&self.install, &self.newer_release) {
+            (InstallState::Ready(version), _) => Some(
+                Button::new("update")
+                    .primary()
+                    .xsmall()
+                    .icon(Lucide::CircleArrowUp)
+                    .label(t!("update.restart", version = version.to_string()).into_owned())
+                    .on_click(cx.listener(|this, _, _, cx| this.restart_to_update(cx))),
+            ),
+            (InstallState::Downloading { done, total }, Some(release)) => {
+                let percent = (*done * 100).checked_div(*total).unwrap_or(0);
+                Some(
+                    Button::new("update").ghost().xsmall().loading(true).label(
+                        t!(
+                            "update.downloading",
+                            version = release.version.to_string(),
+                            percent = percent.to_string()
+                        )
+                        .into_owned(),
+                    ),
+                )
+            }
+            (state, Some(release)) => {
+                let version = release.version.to_string();
+                let label = if matches!(state, InstallState::Failed(_)) {
+                    t!("update.failed", version = version)
+                } else {
+                    t!("update.available", version = version)
+                };
+                Some(
+                    Button::new("update")
+                        .ghost()
+                        .xsmall()
+                        .icon(Lucide::CircleArrowUp)
+                        .label(label.into_owned())
+                        .on_click(cx.listener(|this, _, window, cx| this.open_update(window, cx))),
+                )
+            }
+            (_, None) => None,
+        };
 
         let toolbar = h_flex()
             .px_3()

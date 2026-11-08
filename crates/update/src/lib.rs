@@ -1,7 +1,14 @@
-//! Newer releases of the app, from its GitHub releases.
+//! Newer releases of the app, from its GitHub releases, and installing them.
 //!
 //! [`latest`] asks GitHub for the newest release. [`CheckCache`] keeps what the last check found,
 //! so that the app asks at most once a day and still shows a newer release at every start.
+//! [`Installation::prepare`] downloads and unpacks a release next to the app, and
+//! [`apply::start`] swaps it in once the app has quit.
+
+pub mod apply;
+mod install;
+
+pub use install::{Installation, MARKER, PackageInfo, SUMS};
 
 use std::fmt;
 use std::io;
@@ -21,7 +28,7 @@ pub const API_URL_VAR: &str = "PLAMO_TRANSLATE_UPDATE_URL";
 /// How often the app asks GitHub at most.
 pub const CHECK_INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
 
-const USER_AGENT: &str = concat!("plamo-translate-desktop/", env!("CARGO_PKG_VERSION"));
+pub(crate) const USER_AGENT: &str = concat!("plamo-translate-desktop/", env!("CARGO_PKG_VERSION"));
 
 /// A release's version, `major.minor.patch` (the tags are `v` and the same).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -113,8 +120,20 @@ pub struct Asset {
 pub enum UpdateError {
     #[error("cannot reach GitHub: {0}")]
     Http(String),
-    #[error("unexpected answer from GitHub: {0}")]
+    #[error("unexpected data: {0}")]
     Format(String),
+    /// A build from source, or a copy whose `package.json` is missing.
+    #[error("not installed from a package: {0}")]
+    NotPackaged(String),
+    #[error("the release has no {0}")]
+    NoPackage(String),
+    #[error("{0} does not match its checksum")]
+    Checksum(String),
+    /// The folder of the app cannot be written to, as under Program Files.
+    #[error("cannot write next to the app: {0}")]
+    NotWritable(String),
+    #[error("{0}")]
+    Io(String),
 }
 
 /// Asks GitHub for the newest release (drafts and pre-releases are not given).

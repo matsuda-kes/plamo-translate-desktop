@@ -22,8 +22,10 @@ locally on your computer. It works offline once a model is downloaded. Written i
 - English and Japanese UI. It follows the OS language by default and can be changed under Settings (the gear in the status bar). `PLAMO_LANG=ja` or `en` overrides both.
 - Light and dark themes. The default follows the OS; Settings can fix either one.
 - The source and the translation scroll together, and moving the caret in one selects the corresponding paragraph in the other (can be turned off in Settings).
-- New versions: the app asks GitHub at most once a day whether a newer release is out, and the status bar then links to it.
-  **Check for new versions** in Settings turns this off, and **Check now** there asks at once.
+- Updates: the app asks GitHub at most once a day whether a newer release is out, and the status bar then says so.
+  Clicking it downloads the new version (checked against `SHA256SUMS.txt`) and puts it next to the app; **Restart to update** then
+  swaps it in and starts it. Files you added to the app's folder stay. A build from source only links to the release page.
+  **Check for new versions** in Settings turns the check off; **Check now** there asks at once, next to the app's version.
 
 Shortcuts: `Ctrl+Enter` translates now. `Ctrl+Shift+C` copies the translation. On macOS these are `Cmd+Enter` and `Cmd+Shift+C`.
 
@@ -227,6 +229,8 @@ and the NPU's compiled graphs (`openvino-cache/`) are kept in:
 
 The log records start-up, detected devices, model loads, downloads, deletions, settings changes, and where long texts were retried or cut, but never translated text.
 A log larger than 1 MiB is moved to `app.log.1` at start-up.
+
+An update is prepared in `update` in the app's folder (on macOS, `.plamo-translate-update` next to the app), which the next start removes.
 
 Settings are in `settings.json`: `%APPDATA%\plamo-translate-desktop\config` on Windows, `~/.config/plamo-translate-desktop` (`$XDG_CONFIG_HOME`) on Linux,
 and the data folder above on macOS.

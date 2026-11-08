@@ -51,6 +51,20 @@ mod macos {
 }
 
 fn main() {
+    // A new version, started from the staging folder to swap itself in (see `update::apply`):
+    // it does only that, without a window.
+    if std::env::args_os()
+        .nth(1)
+        .is_some_and(|arg| arg == update::apply::APPLY_ARG)
+    {
+        applog::init(&settings::log_path());
+        match update::apply::run_if_asked() {
+            Some(Ok(())) => app_log!("update to {} installed", env!("CARGO_PKG_VERSION")),
+            Some(Err(e)) => app_log!("update to {} failed: {e}", env!("CARGO_PKG_VERSION")),
+            None => {}
+        }
+        return;
+    }
     // SAFETY: first thing in main, before any thread starts.
     unsafe {
         appdata::devices::configure_openvino();
