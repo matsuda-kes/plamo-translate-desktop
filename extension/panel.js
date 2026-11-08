@@ -434,9 +434,9 @@ function errorText(message) {
  * would help.
  */
 async function pageFailed(error) {
-  // The extension may enter a tab after the toolbar button, the context menu, or a shortcut was
-  // used on it (activeTab), until the tab goes to another site; buttons in the panel do not grant
-  // that.
+  // The extension may enter a tab after the context menu or one of its shortcuts was used on it
+  // (activeTab), until the tab goes to another site. Buttons in the panel do not grant that, and
+  // neither does the toolbar button, since it opens the panel (see design.md).
   // Other tabs need the permission for their site. Browser pages, the extension stores, and
   // error pages cannot be entered at all.
   const all = { origins: ["<all_urls>"] };

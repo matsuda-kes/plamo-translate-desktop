@@ -551,7 +551,9 @@ or, from v0.4.0, on its own with an in-browser engine (see "In-browser engine" b
 - Closing the port ends the host and frees the model's memory and the app's files (which Windows keeps locked while the host runs).
   The next request starts it again.
 - Page translation (`page.js`, injected on request with `activeTab`, or from the panel with the optional all-sites permission):
-  - Buttons in the side panel do not grant `activeTab` (the toolbar button, the context menu, and the shortcuts do), so the panel reaches a tab only after one of those was used on it,
+  - Buttons in the side panel do not grant `activeTab`, and neither does the toolbar button: Chromium grants no tab permissions when the action
+    opens a side panel (`openPanelOnActionClick`), since the panel stays across tab changes (`ExtensionActionRunner::RunAction`, crbug.com/40904917).
+    The context menu and the shortcuts do, so the panel reaches a tab only after one of those was used on it,
     until the tab goes to another site. When the injection fails for want of a host permission, the panel offers the all-sites permission unless it is granted already;
     other failures (browser pages, the extension stores, error pages) say that the page cannot be translated. The notice sits under the page button.
   - Injecting into a page that has `page.js` already starts it again; it sends only runs not sent yet, and shows its box again even when there are none.

@@ -94,8 +94,8 @@ Install the app first (see [Download](#download)), then:
    The toolbar button opens the panel to type or paste text. A keyboard shortcut set at `chrome://extensions/shortcuts` translates the selected text too.
 4. To translate a whole page, right-click it and choose **Translate this page with PLaMo** (or **Translate this page** in the panel,
    or a keyboard shortcut set at `chrome://extensions/shortcuts`).
-   The browser lets the panel's button into a tab only after the toolbar button, the right-click menu, or a shortcut was used on it, until the tab
-   goes to another site; on other tabs the panel offers to allow the extension on all sites.
+   The browser lets the panel's button into a tab only after the right-click menu or one of the shortcuts was used on it (the toolbar button
+   does not count), until the tab goes to another site; on other tabs the panel offers to allow the extension on all sites.
    Paragraphs are translated in place, keeping links and formatting: those in view first, and when you scroll, the ones you scrolled to.
    Hidden ones (collapsed sections, menus) wait until they show. **Settings** in the panel can limit it to the paragraphs near the view,
    translating the rest as you scroll to them.

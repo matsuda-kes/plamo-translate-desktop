@@ -218,7 +218,7 @@
     }
   },
   "pageNotAllowed": {
-    "message": "The browser lets the panel translate only a tab where the toolbar button, the right-click menu, or a shortcut was used, until it goes to another site. Right-click this page and choose \"Translate this page with PLaMo\", or allow the extension on all sites."
+    "message": "The browser lets the panel translate only a tab where the right-click menu or one of the extension's shortcuts was used (not the toolbar button), until it goes to another site. Right-click this page and choose \"Translate this page with PLaMo\", or allow the extension on all sites."
   },
   "allowAllSites": {
     "message": "Allow on all sites"
