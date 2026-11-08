@@ -12,6 +12,7 @@ All notable changes to PLaMo Translate Desktop. Each release's section here also
 ### Fixed
 
 - **Translate with PLaMo** in the browser extension shows the translation in the side panel of the window it was chosen in. A side panel open in another window could take it.
+- A translation asked for from the right-click menu or the selection shortcut whose side panel did not open is dropped after 30 seconds. Opening the panel in that window later translated the old text.
 
 ## [0.4.0] - 2026-11-07
 

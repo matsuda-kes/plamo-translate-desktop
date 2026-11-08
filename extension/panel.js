@@ -265,7 +265,16 @@ document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible") shownAt = Date.now();
 });
 
+/** How long a request waits for its window's panel, which opens within a few seconds. */
+const REQUEST_TIMEOUT_MS = 30_000;
+
 async function takeRequest(request) {
+  // Not taken in time, so its window's panel did not open: opening it there later must not
+  // translate an old selection. Any panel drops it.
+  if (Date.now() - (request.at ?? 0) > REQUEST_TIMEOUT_MS) {
+    chrome.storage.session.remove("request");
+    return;
+  }
   if (request.windowId !== (await windowId)) return;
   chrome.storage.session.remove("request");
   // The shortcut pressed while the keyboard was in the panel, shown for a while: the page's
