@@ -7,6 +7,7 @@ All notable changes to PLaMo Translate Desktop. Each release's section here also
 ### Added
 
 - The app updates itself: it asks GitHub at most once a day whether a new version is out, and the status bar then says so. Clicking it downloads the new version (checked against `SHA256SUMS.txt`) and puts it next to the app; **Restart to update** swaps it in. Files added to the app's folder stay. **Check for new versions** in Settings turns the check off, and **Check now** asks at once. Settings also shows the app's version.
+  - Version 0.4.0 and earlier cannot update themselves: install this version by hand as before (replace the app's files with the new package's). From this version on, the app updates itself.
 - The browser extension follows: when the app has updated its copy of the extension, the panel offers **Reload** to load the new version. The extension's own package says in the panel when a new version is out (at most once a day; **Check for new versions** in its settings turns this off).
 - A keyboard shortcut in the browser extension translates the page, as **Translate this page with PLaMo** in the right-click menu does. It has no key at first: set one at `chrome://extensions/shortcuts`.
 - A keyboard shortcut in the browser extension opens the side panel and translates the selected text there, as **Translate with PLaMo** in the right-click menu does; with nothing selected, it puts the cursor in the panel's text box. It has no key at first: set one at `chrome://extensions/shortcuts`.
