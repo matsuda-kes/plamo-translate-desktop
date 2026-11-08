@@ -506,8 +506,8 @@ update.title:
   en: "Update to %{version}"
   ja: "%{version} に更新"
 update.body:
-  en: "Downloads the new version and puts it next to this copy of the app. Once it is ready, the button in the status bar restarts the app into the new version."
-  ja: "新しい版をダウンロードして、このアプリの隣に用意します。用意ができたら、ステータスバーのボタンでアプリを再起動すると、新しい版に入れ替わります。"
+  en: "Downloads the new version. When it is done, \"Restart to update to %{version}\" in the status bar starts the new version."
+  ja: "新しい版をダウンロードします。終わったら、ステータスバーの［再起動して %{version} に更新］を押すと、新しい版になります。"
 update.manual:
   en: "This copy was not installed from a release package, so it cannot update itself. Download the new version from the release page."
   ja: "このアプリはリリースのパッケージから入れたものではないため、自動では更新できません。リリースのページから新しい版をダウンロードしてください。"

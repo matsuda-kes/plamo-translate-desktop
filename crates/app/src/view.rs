@@ -2188,7 +2188,7 @@ impl TranslatorView {
                         .gap_3()
                         .text_sm()
                         .child(if installable {
-                            t!("update.body").into_owned()
+                            t!("update.body", version = release.version.to_string()).into_owned()
                         } else {
                             t!("update.manual").into_owned()
                         })

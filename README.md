@@ -23,8 +23,8 @@ locally on your computer. It works offline once a model is downloaded. Written i
 - Light and dark themes. The default follows the OS; Settings can fix either one.
 - The source and the translation scroll together, and moving the caret in one selects the corresponding paragraph in the other (can be turned off in Settings).
 - Updates: the app asks GitHub at most once a day whether a newer release is out, and the status bar then says so.
-  Clicking it downloads the new version (checked against `SHA256SUMS.txt`) and puts it next to the app; **Restart to update** then
-  swaps it in and starts it. Files you added to the app's folder stay. A build from source only links to the release page.
+  Clicking it downloads the new version (checked against `SHA256SUMS.txt`), and **Restart to update** then starts the new version.
+  Files you added to the app's folder stay. A build from source only links to the release page.
   **Check for new versions** in Settings turns the check off; **Check now** there asks at once, next to the app's version.
 
 Shortcuts: `Ctrl+Enter` translates now. `Ctrl+Shift+C` copies the translation. On macOS these are `Cmd+Enter` and `Cmd+Shift+C`.
