@@ -108,6 +108,9 @@ Install the app first (see [Download](#download)), then:
    Translating another page stops this one, which can be resumed later.
    **Pages** under **Settings** in the panel shows translations below the original instead.
 
+When the app updates itself, the extension in its folder is updated with it, and the panel offers **Reload** to load the new version
+(Developer mode must stay on: Chrome disables unpacked extensions without it).
+
 The extension's texts (the panel, the menus, and the box on the page) follow the browser's language;
 **Display language** under **Settings** in the panel sets English or Japanese instead, independently of the app.
 
@@ -131,8 +134,9 @@ The browser extension package (`plamo-translate-desktop-X.Y.Z-browser-extension.
    Chrome and Edge install extensions from files only through their stores, hence Load unpacked.
 3. Open the panel with the toolbar button and download a model under **Settings** (see below).
 
-To update, replace the folder's files with the new version's and press the reload button on the extension in `chrome://extensions`:
-the settings and the downloaded models are kept. For the larger models and faster translation, install the app later (see [Download](#download))
+The panel says when a new version is out (it asks GitHub at most once a day; **Check for new versions** under **Settings** turns this off).
+To update, replace the folder's files with the new version's: the panel then offers **Reload** (or press the reload button on the extension
+in `chrome://extensions`). The settings and the downloaded models are kept. For the larger models and faster translation, install the app later (see [Download](#download))
 and choose **Connect** in its settings (step 1 above). The extension already loaded works with it, and **Automatic** uses the app from the next time
 the engine starts (after **Release**, or 5 minutes without use).
 

@@ -656,5 +656,33 @@
   "pageNearbyHint": {
     "message": "続きはスクロールに合わせて訳します。",
     "description": "Explanation under the near-the-view setting"
+  },
+  "extensionUpdated": {
+    "message": "拡張機能のファイルが $VERSION$ に更新されています。再読み込みすると使えます。",
+    "placeholders": {
+      "version": {
+        "content": "$1"
+      }
+    }
+  },
+  "extensionReload": {
+    "message": "再読み込み"
+  },
+  "extensionNewVersion": {
+    "message": "拡張機能の新しい版 $VERSION$ が出ています。",
+    "placeholders": {
+      "version": {
+        "content": "$1"
+      }
+    }
+  },
+  "extensionDownload": {
+    "message": "ダウンロード"
+  },
+  "checkUpdates": {
+    "message": "新しい版を確認する"
+  },
+  "checkUpdatesHint": {
+    "message": "新しい版が出ているかを、1 日に 1 回まで GitHub に問い合わせます。"
   }
 }

@@ -518,6 +518,12 @@ instead of being overwritten.
     in use on Windows, so a browser host still running the old files does not block it. The next start removes the staging folder, or
     leaves what is still in use for later.
   - `plan.json` is written by one version and read by the next, so its fields are only ever added.
+  - The extension: Chrome reads an unpacked extension's files from disk when they are requested, so when the panel opens it fetches its own
+    `manifest.json` and, if the version there differs from the one loaded (the app swapped in a newer copy), offers **Reload**
+    (`chrome.runtime.reload()`). That needs Developer mode, which Load unpacked needs anyway: without it, Chrome disables an unpacked
+    extension when it reloads (`DISABLE_UNSUPPORTED_DEVELOPER_EXTENSION`). The extension's own package has `package.json` too
+    (`browser-extension`, no entries); with it, the panel asks GitHub at most once a day (`updateCheck` in storage) and links a newer
+    release, unless **Check for new versions** in its settings is off. The app's copy has none: the app checks.
   - Settings shows the app's version next to **Check now**.
 - Icon: a white block "p" on a blue rounded tile, after the PLaMo logo. `scripts/gen_icons.py` produces `assets/icon/`
   (SVG, a 256 px PNG, and a multi-size `.ico`) using only the Python standard library.

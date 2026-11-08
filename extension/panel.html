@@ -13,6 +13,11 @@
       <button id="release" class="small" data-i18n="release" data-i18n-title="releaseTitle"></button>
     </header>
     <div id="status" class="status"></div>
+    <!-- A newer version of the extension: on disk (the app updated itself), or on GitHub. -->
+    <div id="updateNotice" class="notice update-notice" hidden>
+      <span id="updateText"></span>
+      <button id="updateAction" class="small"></button>
+    </div>
     <!-- At the top: the controls below it belong to the text box. -->
     <button id="translatePage" class="page-button" data-i18n="translatePage" data-i18n-title="translatePageTitle"></button>
     <!-- Under the page button, whose failures it explains, and in view whatever the panel shows. -->
@@ -51,6 +56,11 @@
         <p class="hint check-hint" data-i18n="parallelPagesHint"></p>
       </div>
       <label><span data-i18n="uiLanguage"></span><select id="uiLanguage"></select></label>
+      <!-- Only in the extension's own package: the app's copy is updated with the app. -->
+      <div id="checkUpdatesRow" hidden>
+        <label class="check"><input type="checkbox" id="checkUpdates" /><span data-i18n="checkUpdates"></span></label>
+        <p class="hint check-hint" data-i18n="checkUpdatesHint"></p>
+      </div>
       <!-- In the browser, a link to setting up the app, which the larger models need. -->
       <p class="hint"><span id="settingsHint"></span> <a id="appGuide" href="#" hidden data-i18n="appGuide"></a></p>
       <!-- Back to a first start, for example to see the license notice again. -->

@@ -62,7 +62,7 @@ $("target").addEventListener("change", () => {
 });
 $("style").addEventListener("change", () => chrome.storage.local.set({ style: $("style").value }));
 $("pageMode").addEventListener("change", () => chrome.storage.local.set({ pageMode: $("pageMode").value }));
-for (const id of ["pageMarks", "pageNearby", "parallelPages"]) {
+for (const id of ["pageMarks", "pageNearby", "parallelPages", "checkUpdates"]) {
   $(id).addEventListener("change", () => chrome.storage.local.set({ [id]: $(id).checked }));
 }
 $("uiLanguage").addEventListener("change", () => chrome.storage.local.set({ uiLanguage: $("uiLanguage").value }));
@@ -167,6 +167,7 @@ function applyLanguage() {
   setTranslating(currentId !== null);
   $("progress").textContent = progress();
   if (notice) renderNotice();
+  if (updateNotice) renderUpdateNotice();
 }
 
 /** Fills `select` with `values`, labelled by `label`, keeping its selection. */
@@ -234,7 +235,7 @@ $("copy").addEventListener("click", async () => {
 // is first contacted.
 const ready = Promise.all([
   loadUiLanguage(),
-  chrome.storage.local.get({ target: "auto", style: "", pageMode: "replace", pageMarks: true, pageNearby: false, parallelPages: true, engine: "auto", licenseAccepted: false, ...choices }),
+  chrome.storage.local.get({ target: "auto", style: "", pageMode: "replace", pageMarks: true, pageNearby: false, parallelPages: true, checkUpdates: true, engine: "auto", licenseAccepted: false, ...choices }),
 ]).then(([uiLanguage, saved]) => {
   applyLanguage();
   $("uiLanguage").value = uiLanguage;
@@ -244,6 +245,7 @@ const ready = Promise.all([
   $("pageMarks").checked = saved.pageMarks;
   $("pageNearby").checked = saved.pageNearby;
   $("parallelPages").checked = saved.parallelPages;
+  $("checkUpdates").checked = saved.checkUpdates;
   $("engine").value = saved.engine;
   updateStyleVisibility();
   for (const key of Object.keys(choices)) Object.assign(choices[key], saved[key]);
@@ -696,5 +698,95 @@ function hideNotice() {
   $("notice").hidden = true;
 }
 
+// ---- New versions ----
+
+const RELEASES_API = "https://api.github.com/repos/tanakh/plamo-translate-desktop/releases/latest";
+const UPDATE_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
+/** The update notice under the header, as `showNotice` takes it; null while hidden. */
+let updateNotice = null;
+
+/** `0.5.1` (or `v0.5.1`) → [0, 5, 1]; null for anything else. */
+function parseVersion(text) {
+  const match = /^v?(\d+)\.(\d+)\.(\d+)$/.exec(String(text ?? ""));
+  return match ? match.slice(1).map(Number) : null;
+}
+
+/** Whether version `a` comes after `b` (both parsed). */
+function isNewer(a, b) {
+  for (let i = 0; i < 3; i++) if (a[i] !== b[i]) return a[i] > b[i];
+  return false;
+}
+
+/** A file of the extension as it is on disk now: an unpacked extension's files are read from there. */
+async function packageFile(name) {
+  const response = await fetch(chrome.runtime.getURL(name), { cache: "no-store" });
+  if (!response.ok) throw new Error(`${name}: ${response.status}`);
+  return response.json();
+}
+
+/**
+ * Shows a newer version of the extension. Its files on disk come first: when they are newer than
+ * those loaded (the app updated itself, with its copy of the extension), a reload loads them.
+ * Otherwise, in the extension's own package (its `package.json`), the newest release on GitHub,
+ * asked at most once a day unless turned off in the settings.
+ */
+async function checkForUpdate() {
+  const loaded = chrome.runtime.getManifest().version;
+  const onDisk = await packageFile("manifest.json").then((m) => m.version, () => loaded);
+  if (onDisk !== loaded) {
+    showUpdateNotice(() => t("extensionUpdated", onDisk), () => t("extensionReload"), () => chrome.runtime.reload());
+    return;
+  }
+  const standalone = await packageFile("package.json").then((p) => p.kind === "browser-extension", () => false);
+  $("checkUpdatesRow").hidden = !standalone;
+  const { checkUpdates, updateCheck } = await chrome.storage.local.get({ checkUpdates: true, updateCheck: null });
+  if (!standalone || !checkUpdates) return;
+  let check = updateCheck;
+  // Asked again after a day, or when the clock was set back.
+  const age = Date.now() - (check?.at ?? 0);
+  if (!check || age < 0 || age >= UPDATE_INTERVAL_MS) {
+    try {
+      const response = await fetch(RELEASES_API, { headers: { Accept: "application/vnd.github+json" } });
+      if (!response.ok) throw new Error(String(response.status));
+      const release = await response.json();
+      check = { at: Date.now(), version: String(release.tag_name).replace(/^v/, ""), page: String(release.html_url) };
+      await chrome.storage.local.set({ updateCheck: check });
+    } catch (e) {
+      console.warn("update check failed:", e);
+      return;
+    }
+  }
+  const latest = parseVersion(check.version);
+  const current = parseVersion(loaded);
+  if (latest && current && isNewer(latest, current)) {
+    showUpdateNotice(() => t("extensionNewVersion", check.version), () => t("extensionDownload"), () =>
+      chrome.tabs.create({ url: check.page }),
+    );
+  }
+}
+
+function showUpdateNotice(text, label, action) {
+  updateNotice = { text, label, action };
+  renderUpdateNotice();
+}
+
+function renderUpdateNotice() {
+  $("updateText").textContent = updateNotice.text();
+  $("updateAction").textContent = updateNotice.label();
+  $("updateAction").onclick = updateNotice.action;
+  $("updateNotice").hidden = false;
+}
+
+$("checkUpdates").addEventListener("change", () => {
+  if ($("checkUpdates").checked) {
+    checkForUpdate();
+  } else {
+    updateNotice = null;
+    $("updateNotice").hidden = true;
+  }
+});
+
 // Connect right away, with the saved choices, so the model loads while the user reads.
 ready.then(() => send({ type: "options" }));
+ready.then(checkForUpdate);

@@ -80,6 +80,9 @@ jobs:
           cp -r extension "$dist"
           scripts/notices.sh extension "$dist/THIRD-PARTY-NOTICES.txt"
           cp LICENSE-MIT LICENSE-APACHE "$dist/"
+          # Tells the panel that it is the extension's own package, which asks GitHub for new
+          # versions (the app's copy is updated with the app).
+          python3 scripts/package-marker.py "$dist" browser-extension --no-entries
           find "$dist" -maxdepth 1 | sort
           (cd dist && zip -qr "../$PACKAGE.zip" "$PACKAGE")
 

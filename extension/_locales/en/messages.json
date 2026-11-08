@@ -656,5 +656,33 @@
   "pageNearbyHint": {
     "message": "The rest is translated as you scroll to it.",
     "description": "Explanation under the near-the-view setting"
+  },
+  "extensionUpdated": {
+    "message": "The extension's files are now version $VERSION$. Reload it to use them.",
+    "placeholders": {
+      "version": {
+        "content": "$1"
+      }
+    }
+  },
+  "extensionReload": {
+    "message": "Reload"
+  },
+  "extensionNewVersion": {
+    "message": "Version $VERSION$ of the extension is out.",
+    "placeholders": {
+      "version": {
+        "content": "$1"
+      }
+    }
+  },
+  "extensionDownload": {
+    "message": "Download"
+  },
+  "checkUpdates": {
+    "message": "Check for new versions"
+  },
+  "checkUpdatesHint": {
+    "message": "Asks GitHub at most once a day whether a newer version of the extension is out."
   }
 }
