@@ -22,6 +22,11 @@ pub fn catalog_cache_path() -> PathBuf {
     data_file("catalog.json")
 }
 
+/// What the last check for a newer release found (see the `update` crate).
+pub fn update_check_path() -> PathBuf {
+    data_file("update.json")
+}
+
 /// The application log, next to the models.
 pub fn log_path() -> PathBuf {
     data_file("app.log")
@@ -59,6 +64,8 @@ pub struct Settings {
     pub document: DocumentSettings,
     /// Scroll the source and the translation together, and show the counterpart of the caret.
     pub sync_scroll: bool,
+    /// Ask GitHub for a newer release, at most once a day.
+    pub check_updates: bool,
 }
 
 impl Default for Settings {
@@ -72,6 +79,7 @@ impl Default for Settings {
             theme: ThemeSetting::default(),
             document: DocumentSettings::default(),
             sync_scroll: true,
+            check_updates: true,
         }
     }
 }

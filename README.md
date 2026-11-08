@@ -22,6 +22,8 @@ locally on your computer. It works offline once a model is downloaded. Written i
 - English and Japanese UI. It follows the OS language by default and can be changed under Settings (the gear in the status bar). `PLAMO_LANG=ja` or `en` overrides both.
 - Light and dark themes. The default follows the OS; Settings can fix either one.
 - The source and the translation scroll together, and moving the caret in one selects the corresponding paragraph in the other (can be turned off in Settings).
+- New versions: the app asks GitHub at most once a day whether a newer release is out, and the status bar then links to it.
+  **Check for new versions** in Settings turns this off, and **Check now** there asks at once.
 
 Shortcuts: `Ctrl+Enter` translates now. `Ctrl+Shift+C` copies the translation. On macOS these are `Cmd+Enter` and `Cmd+Shift+C`.
 
@@ -216,7 +218,7 @@ A GGUF path passed as the first argument (or in `PLAMO_MODEL`) overrides the mod
 
 ### Files and logs
 
-Models (in `models/`), the cached model list (`catalog.json`), small logs (`app.log`, and `host.log` for the browser extension's host),
+Models (in `models/`), the cached model list (`catalog.json`), the last check for a new version (`update.json`), small logs (`app.log`, and `host.log` for the browser extension's host),
 and the NPU's compiled graphs (`openvino-cache/`) are kept in:
 
 - Windows: `%LOCALAPPDATA%\plamo-translate-desktop\data`

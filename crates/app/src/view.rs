@@ -3,7 +3,7 @@
 use std::collections::VecDeque;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 
 use engine::StopReason;
 use engine::llama::{Device, RuntimeOptions};
@@ -25,6 +25,7 @@ use gpui_kit::component::{
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
 use rust_i18n::t;
+use update::{CheckCache, Release, Version};
 
 use crate::align::{Alignment, ChunkSpan, Side};
 use crate::backend::{self, BackendEvent, BackendPanel};
@@ -100,6 +101,46 @@ fn token_choices(document: &DocumentSettings) -> (Vec<Choice<usize>>, Vec<Choice
             defaults.history_tokens,
         ),
     )
+}
+
+/// The settings' Check now button, and what it found.
+fn update_check_row(
+    check: UpdateCheck,
+    muted: Hsla,
+    view: WeakEntity<TranslatorView>,
+) -> AnyElement {
+    let checking = check == UpdateCheck::Checking;
+    let result = match check {
+        UpdateCheck::Idle => None,
+        UpdateCheck::Checking => Some(t!("settings.update_checking")),
+        UpdateCheck::UpToDate(version) => {
+            Some(t!("settings.update_latest", version = version.to_string()))
+        }
+        UpdateCheck::Found(version) => Some(t!("update.available", version = version.to_string())),
+        UpdateCheck::Failed(error) => Some(t!("settings.update_failed", error = error)),
+    };
+    h_flex()
+        .gap_3()
+        .items_center()
+        .child(
+            Button::new("check-now")
+                .small()
+                .label(t!("settings.check_now").into_owned())
+                .loading(checking)
+                .disabled(checking)
+                .on_click(move |_, window, cx| {
+                    let _ = view.update(cx, |this, cx| this.check_for_update(true, cx));
+                    window.refresh();
+                }),
+        )
+        .children(result.map(|text| {
+            div()
+                .text_xs()
+                .text_color(muted)
+                .min_w_0()
+                .child(text.into_owned())
+        }))
+        .into_any_element()
 }
 
 /// The browser extension section of the settings dialog.
@@ -339,6 +380,17 @@ enum Status {
     Error(String),
 }
 
+/// The settings' Check now, while its result shows there.
+#[derive(Debug, Clone, PartialEq)]
+enum UpdateCheck {
+    Idle,
+    Checking,
+    /// No newer release; the newest one's version.
+    UpToDate(Version),
+    Found(Version),
+    Failed(String),
+}
+
 pub struct TranslatorView {
     source: Entity<TextareaState>,
     output: Entity<TextareaState>,
@@ -423,6 +475,10 @@ pub struct TranslatorView {
     shown_partial: bool,
     /// Browser host registration as last checked, and the error of the last change, if any.
     browser: (browser::Registration, Option<String>),
+    /// A release newer than this build, shown in the status bar.
+    newer_release: Option<Release>,
+    update_check: UpdateCheck,
+    _update_task: Task<()>,
     copied: bool,
     debounce: Task<()>,
     copied_reset: Task<()>,
@@ -698,6 +754,9 @@ impl TranslatorView {
             measure_requested: false,
             shown_partial: false,
             browser: (browser::Registration::NotRegistered, None),
+            newer_release: None,
+            update_check: UpdateCheck::Idle,
+            _update_task: Task::ready(()),
             copied: false,
             debounce: Task::ready(()),
             copied_reset: Task::ready(()),
@@ -705,6 +764,9 @@ impl TranslatorView {
             _events: events,
         };
         this.link_selection_focus(cx);
+        if this.settings.check_updates {
+            this.check_for_update(false, cx);
+        }
         // Development aid (debug builds only): open the settings at start, for screenshots.
         if cfg!(debug_assertions) && std::env::var_os("PLAMO_DEBUG_OPEN_SETTINGS").is_some() {
             cx.defer_in(window, |this, window, cx| this.open_settings(window, cx));
@@ -991,6 +1053,10 @@ impl TranslatorView {
 
     fn open_settings(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.browser = (browser::registration(), None);
+        // A result shows only after Check now, not from the check at start.
+        if self.update_check != UpdateCheck::Checking {
+            self.update_check = UpdateCheck::Idle;
+        }
         let language = self.ui_language_select.clone();
         let theme = self.theme_select.clone();
         let chunk = self.chunk_select.clone();
@@ -999,14 +1065,26 @@ impl TranslatorView {
         window.open_dialog(cx, move |dialog, _, cx| {
             // Read on every render: the theme can change from this dialog.
             let muted = cx.theme().muted_foreground;
-            let (sync_scroll, (registration, browser_error)) = view
+            let (sync_scroll, check_updates, update_check, (registration, browser_error)) = view
                 .upgrade()
                 .map(|view| {
                     let this = view.read(cx);
-                    (this.settings.sync_scroll, this.browser.clone())
+                    (
+                        this.settings.sync_scroll,
+                        this.settings.check_updates,
+                        this.update_check.clone(),
+                        this.browser.clone(),
+                    )
                 })
-                .unwrap_or((false, (browser::Registration::NotRegistered, None)));
+                .unwrap_or((
+                    false,
+                    false,
+                    UpdateCheck::Idle,
+                    (browser::Registration::NotRegistered, None),
+                ));
             let toggle_view = view.clone();
+            let updates_view = view.clone();
+            let check_view = view.clone();
             let browser_view = view.clone();
             let row = |label: &str, select: AnyElement| {
                 h_flex()
@@ -1054,6 +1132,24 @@ impl TranslatorView {
                                 .text_color(muted)
                                 .child(t!("settings.sync_scroll_note").into_owned()),
                         )
+                        .child(
+                            Switch::new("check-updates")
+                                .checked(check_updates)
+                                .label(t!("settings.check_updates").into_owned())
+                                .on_click(move |checked: &bool, window, cx| {
+                                    let _ = updates_view.update(cx, |this, cx| {
+                                        this.set_check_updates(*checked, cx)
+                                    });
+                                    window.refresh();
+                                }),
+                        )
+                        .child(
+                            div()
+                                .text_xs()
+                                .text_color(muted)
+                                .child(t!("settings.check_updates_note").into_owned()),
+                        )
+                        .child(update_check_row(update_check, muted, check_view))
                         .child(browser_settings(
                             registration,
                             browser_error,
@@ -1817,6 +1913,78 @@ impl TranslatorView {
         }
     }
 
+    /// Shows a newer release found before, and asks GitHub again once a day has passed since the
+    /// last check; at once with `now` (the settings' Check now).
+    fn check_for_update(&mut self, now: bool, cx: &mut Context<Self>) {
+        let path = settings::update_check_path();
+        let current = Version::current();
+        if now {
+            self.update_check = UpdateCheck::Checking;
+        } else {
+            let cache = CheckCache::load(&path);
+            self.newer_release = cache.newer_than(current).cloned();
+            if !cache.is_due(SystemTime::now()) {
+                cx.notify();
+                return;
+            }
+        }
+        cx.notify();
+        self._update_task = cx.spawn(async move |this, cx| {
+            let result = cx
+                .background_spawn(async move {
+                    let release = update::latest()?;
+                    if let Err(e) =
+                        CheckCache::checked(SystemTime::now(), release.clone()).save(&path)
+                    {
+                        crate::app_log!("cannot save the update check: {e}");
+                    }
+                    Ok::<_, update::UpdateError>(release)
+                })
+                .await;
+            let _ = this.update(cx, |this, cx| {
+                this.update_check = match result {
+                    Ok(release) => {
+                        crate::app_log!(
+                            "update check: the newest release is {}, this build {current}",
+                            release.version
+                        );
+                        let version = release.version;
+                        let newer = version > current;
+                        // Unless the checks were turned off meanwhile.
+                        if now || this.settings.check_updates {
+                            this.newer_release = newer.then_some(release);
+                        }
+                        if newer {
+                            UpdateCheck::Found(version)
+                        } else {
+                            UpdateCheck::UpToDate(version)
+                        }
+                    }
+                    Err(e) => {
+                        crate::app_log!("update check failed: {e}");
+                        UpdateCheck::Failed(e.to_string())
+                    }
+                };
+                cx.notify();
+            });
+        });
+    }
+
+    fn set_check_updates(&mut self, enabled: bool, cx: &mut Context<Self>) {
+        if self.settings.check_updates == enabled {
+            return;
+        }
+        self.settings.check_updates = enabled;
+        self.settings.save();
+        crate::app_log!("update checks {}", if enabled { "on" } else { "off" });
+        if enabled {
+            self.check_for_update(false, cx);
+        } else {
+            self.newer_release = None;
+            cx.notify();
+        }
+    }
+
     fn set_sync_scroll(&mut self, enabled: bool, cx: &mut Context<Self>) {
         if self.settings.sync_scroll == enabled {
             return;
@@ -2068,6 +2236,16 @@ impl Render for TranslatorView {
             .icon(IconName::Settings)
             .tooltip(t!("settings.title").into_owned())
             .on_click(cx.listener(|this, _, window, cx| this.open_settings(window, cx)));
+        let update_button = self.newer_release.as_ref().map(|release| {
+            let page = release.page.clone();
+            Button::new("update")
+                .ghost()
+                .xsmall()
+                .icon(Lucide::CircleArrowUp)
+                .label(t!("update.available", version = release.version.to_string()).into_owned())
+                .tooltip(t!("update.open_page").into_owned())
+                .on_click(move |_, _, cx| cx.open_url(&page))
+        });
 
         let toolbar = h_flex()
             .px_3()
@@ -2222,6 +2400,7 @@ impl Render for TranslatorView {
                         },
                     ),
             )
+            .children(update_button)
             .child(model_button)
             .child(settings_button)
             // Attribution required by the PLaMo Community License (Article 4).

@@ -70,6 +70,7 @@ crates/
             long-text splitting and loop detection. No GUI dependency.
             examples/translate.rs and examples/download.rs are headless CLIs for testing.
   appdata/  Settings, file locations, logging, device selection: shared by app and host.
+  update/   Newer releases on GitHub: the check, its once-a-day cache, version order.
   app/      GPUI application (binary `plamo-translate-desktop`).
   host/     Native messaging host for the browser extension (binary `plamo-translate-host`).
 extension/  Browser extension (Manifest V3) for Chrome and Edge; vendor/wllama is the
@@ -414,7 +415,7 @@ Future idea: a global hotkey that translates the clipboard (with the `global-hot
 
 The app saves `settings.json` in the platform config directory (`crates/appdata/src/settings.rs`, shared with the host):
 the selected model, the license acceptance, the device and the last device measurement, the glossary, the UI language,
-the theme, the chunk and history sizes, and synchronized scrolling.
+the theme, the chunk and history sizes, synchronized scrolling, and whether to check for new versions.
 The language pair, style, context, auto-translate flag, and window geometry are not saved.
 A file that does not parse (or is not UTF-8; a byte order mark is skipped) is kept as `settings.json.invalid`
 instead of being overwritten.
@@ -494,6 +495,16 @@ instead of being overwritten.
   - Build caches are keyed on the rustc version. A tag can restore only its own caches and those of the default branch,
     so a manual run on `main` before tagging makes the release build warm.
 - Windows-specific behaviour (DirectX rendering, IME, Vulkan performance on real hardware) is checked by running Release artifacts on the Windows host.
+- New versions (from v0.5.0; crate `update`):
+  - At start, unless turned off in Settings, the app shows a newer release found before and, once a day has passed since the last check
+    (or the clock was set back), asks the GitHub API for the newest release (`releases/latest`, which leaves out drafts and pre-releases).
+    The answer is kept in `update.json` in the data folder. A newer version shows in the status bar, linked to the release page.
+    Settings' **Check now** asks at once and shows the result there. Failures are only logged; the next start asks again.
+  - Versions are `major.minor.patch`, compared as numbers; tags are `v` and the same.
+  - `PLAMO_TRANSLATE_UPDATE_URL` replaces the API address, for tests against a local server;
+    `cargo run -p update --example latest` prints what the check finds.
+  - Planned: installing the new version from the app (the package's files, verified with `SHA256SUMS.txt`, unpacked next to the app
+    and swapped in on restart), and the extension's panel reloading the extension once the app's copy of it is newer.
 - Icon: a white block "p" on a blue rounded tile, after the PLaMo logo. `scripts/gen_icons.py` produces `assets/icon/`
   (SVG, a 256 px PNG, and a multi-size `.ico`) using only the Python standard library.
   On Windows, `crates/app/build.rs` embeds the icon as resource ID 1, which GPUI loads for its windows.

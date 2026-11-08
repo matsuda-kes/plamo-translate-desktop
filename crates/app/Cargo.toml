@@ -17,6 +17,7 @@ rocm = ["engine/rocm"]
 [dependencies]
 appdata.workspace = true
 engine.workspace = true
+update.workspace = true
 gpui-kit = "=0.9.0"
 async-channel = "2"
 rust-i18n = "4.2"
