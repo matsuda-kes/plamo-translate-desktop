@@ -142,7 +142,8 @@ the engine starts (after **Release**, or 5 minutes without use).
 
 - **Engine** under **Settings** in the panel: **Automatic** uses the app when it is connected (step 1 above) and the browser otherwise
   (the list shows which it uses now); **PLaMo Translate Desktop** and **In the browser** choose one. The `browser-extension` folder of
-  the app's packages can also be loaded without the app.
+  the app's packages can also be loaded without the app, but only the extension's own package tells when a new version is out
+  (the app's copy leaves that to the app): without the app, use that one.
 - In the browser, choose and download a model under **Settings**: 0.8B or 2B (Q4_K_M; the larger ones do not fit in WebAssembly's memory).
   The first download asks you to accept the PLaMo Community License. Models are stored in the browser, separately from the app's.
 - **Device**: **Automatic** measures the CPU (WebAssembly) and the GPU (WebGPU) on the first translation and keeps the faster one,
