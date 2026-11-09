@@ -75,13 +75,13 @@ fn main() {
         app_log!("panic: {info}");
         default_hook(info);
     }));
+    let settings = settings::Settings::load();
     app_log!(
         "starting {} {}; models in {}",
         env!("CARGO_PKG_NAME"),
         env!("CARGO_PKG_VERSION"),
-        settings::models_dir().display()
+        settings.models_dir().display()
     );
-    let settings = settings::Settings::load();
     // Files found on Hugging Face by earlier runs; the Models dialog refreshes this list.
     let cached = engine::discovery::load_cache(&settings::catalog_cache_path());
     let added = engine::models::register(cached.into_iter().map(|d| d.into_entry()));

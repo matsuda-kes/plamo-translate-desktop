@@ -87,6 +87,19 @@ fn group_digits(n: usize) -> String {
 }
 
 /// Chunk and history size options for the settings dialog.
+/// The model to load from `store`: the saved selection if it is there, else the default model,
+/// else the first one there.
+fn model_to_load(settings: &Settings, store: &ModelStore) -> Option<&'static CatalogEntry> {
+    let usable = |e: &&CatalogEntry| store.state(e).is_usable();
+    settings
+        .model
+        .as_deref()
+        .and_then(catalog::find_entry)
+        .filter(usable)
+        .or_else(|| Some(catalog::default_entry()).filter(usable))
+        .or_else(|| catalog::entries().into_iter().find(usable))
+}
+
 fn token_choices(document: &DocumentSettings) -> (Vec<Choice<usize>>, Vec<Choice<usize>>) {
     let defaults = DocumentSettings::default();
     (
@@ -616,7 +629,7 @@ impl TranslatorView {
         };
 
         let backend = cx.new(|cx| BackendPanel::new(settings.backend.clone(), window, cx));
-        let store = ModelStore::new(settings::models_dir());
+        let store = ModelStore::new(settings.models_dir());
         let models = cx.new(|cx| {
             ModelsPanel::new(
                 store.clone(),
@@ -748,17 +761,7 @@ impl TranslatorView {
 
         let initial = match custom_model {
             Some(path) => Some(ModelChoice::Custom(path)),
-            None => {
-                let downloaded = |e: &&CatalogEntry| store.state(e).is_usable();
-                settings
-                    .model
-                    .as_deref()
-                    .and_then(catalog::find_entry)
-                    .filter(downloaded)
-                    .or_else(|| Some(catalog::default_entry()).filter(downloaded))
-                    .or_else(|| catalog::entries().into_iter().find(downloaded))
-                    .map(ModelChoice::Catalog)
-            }
+            None => model_to_load(&settings, &store).map(ModelChoice::Catalog),
         };
 
         let mut this = Self {
@@ -1119,8 +1122,33 @@ impl TranslatorView {
                 self.pending_replace = Some(entry);
                 self.unload_model(cx);
             }
+            ModelsEvent::ChangeFolder(dir) => self.change_models_folder(dir.clone(), cx),
             ModelsEvent::ReviewLicense => self.open_license(false, window, cx),
             ModelsEvent::CatalogUpdated => self.update_recommendation(cx),
+        }
+    }
+
+    /// Keeps models in `dir` (the default folder for `None`). The files stay where they are. The
+    /// model loaded from the old folder gives way to what the new one has, chosen as at start.
+    fn change_models_folder(&mut self, dir: Option<PathBuf>, cx: &mut Context<Self>) {
+        // The default folder, picked, stays the default (wherever the data directory moves).
+        let dir = dir.filter(|dir| *dir != settings::default_models_dir());
+        if self.settings.models_dir == dir {
+            return;
+        }
+        self.settings.models_dir = dir;
+        self.settings.save();
+        let store = ModelStore::new(self.settings.models_dir());
+        crate::app_log!("models folder set to {}", store.dir().display());
+        self.models
+            .update(cx, |models, cx| models.set_store(store.clone(), cx));
+        if matches!(self.active_model, Some(ModelChoice::Custom(_))) {
+            return;
+        }
+        match model_to_load(&self.settings, &store) {
+            Some(entry) => self.load_model(ModelChoice::Catalog(entry), cx),
+            None if self.active_model.is_some() => self.unload_model(cx),
+            None => {}
         }
     }
 

@@ -336,6 +336,11 @@ impl Downloads {
         &self.store
     }
 
+    /// Downloads from now on go to `store`; those running finish where they started.
+    pub fn set_store(&mut self, store: ModelStore) {
+        self.store = store;
+    }
+
     pub fn is_active(&self, entry: &CatalogEntry) -> bool {
         self.active.lock().unwrap().contains_key(entry.id())
     }

@@ -18,6 +18,8 @@ locally on your computer. It works offline once a model is downloaded. Written i
   - Each file shows the translation quality PFN publishes, with the difference from the unquantized model.
   - Downloads resume after an interruption and are verified with SHA-256.
   - Newly published files are picked up from Hugging Face without an app update.
+  - **Change…** next to the folder in the dialog keeps the models elsewhere, for example on another drive or in a folder shared with other tools
+    (the file names must be those the app uses, such as `plamo-3-translate-2b-Q4_K_M.gguf`). Models already downloaded are not moved.
     When PFN publishes a new version of a file you have, it stays usable, and its row says so with the date; **Update** downloads it.
 - Runs on the CPU (AVX2 or AVX-512) or on a GPU through Vulkan. Linux source builds can also use ROCm. The device is selectable; Automatic uses the fastest one measured on this PC, or else the discrete GPU.
 - English and Japanese UI. It follows the OS language by default and can be changed under Settings (the gear in the status bar). `PLAMO_LANG=ja` or `en` overrides both.
@@ -150,7 +152,9 @@ the engine starts (after **Release**, or 5 minutes without use).
   the app's packages can also be loaded without the app, but only the extension's own package tells when a new version is out
   (the app's copy leaves that to the app): without the app, use that one.
 - In the browser, choose and download a model under **Settings**: 0.8B or 2B (Q4_K_M; the larger ones do not fit in WebAssembly's memory).
-  The first download asks you to accept the PLaMo Community License. Models are stored in the browser, separately from the app's.
+  The first download asks you to accept the PLaMo Community License. Models are stored in the browser, separately from the app's:
+  in the extension's own storage in the browser profile, not as files the app could share. With the app installed,
+  the extension translates with the app's model, and the one in the browser can be deleted under **Settings**.
 - **Device**: **Automatic** measures the CPU (WebAssembly) and the GPU (WebGPU) on the first translation and keeps the faster one,
   shown as, for example, **Automatic (GPU)** with the speeds measured. **Measure and choose** below it measures them again.
   With 2B, generation runs at about 48 tokens/s on a Ryzen AI Max+ 395 (Radeon 8060S), 67 on a Radeon RX 9070 XT,
@@ -230,7 +234,7 @@ A GGUF path passed as the first argument (or in `PLAMO_MODEL`) overrides the mod
 
 ### Files and logs
 
-Models (in `models/`), the cached model list (`catalog.json`), the last check for a new version (`update.json`), small logs (`app.log`, and `host.log` for the browser extension's host),
+Models (in `models/`, unless another folder is chosen in the Models dialog), the cached model list (`catalog.json`), the last check for a new version (`update.json`), small logs (`app.log`, and `host.log` for the browser extension's host),
 and the NPU's compiled graphs (`openvino-cache/`) are kept in:
 
 - Windows: `%LOCALAPPDATA%\plamo-translate-desktop\data`

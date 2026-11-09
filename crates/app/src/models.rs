@@ -42,6 +42,9 @@ pub enum ModelsEvent {
     /// The newest revision of the active model is downloaded beside the file in use. The owner
     /// unloads the model, calls [`ModelsPanel::replace`], then loads it again.
     ReplaceActive(&'static CatalogEntry),
+    /// Keep models in this folder (the default one for `None`). The owner saves it and calls
+    /// [`ModelsPanel::set_store`].
+    ChangeFolder(Option<PathBuf>),
     /// Show the license agreement (downloads stay disabled until it is accepted).
     ReviewLicense,
     /// Entries were added or updated from Hugging Face.
@@ -68,6 +71,8 @@ pub struct ModelsPanel {
     use_when_done: bool,
     catalog_status: CatalogStatus,
     catalog_cache: PathBuf,
+    /// Why the folder picker failed (on Linux without a desktop portal).
+    folder_error: Option<String>,
     _events: Task<()>,
     _refresh: Task<()>,
 }
@@ -106,6 +111,7 @@ impl ModelsPanel {
             use_when_done: false,
             catalog_status: CatalogStatus::Checking,
             catalog_cache,
+            folder_error: None,
             _events: events,
             _refresh: Task::ready(()),
         };
@@ -169,6 +175,42 @@ impl ModelsPanel {
 
     pub fn store(&self) -> &ModelStore {
         self.downloads.store()
+    }
+
+    /// Keeps models in another folder. No download may be running.
+    pub fn set_store(&mut self, store: ModelStore, cx: &mut Context<Self>) {
+        self.downloads.set_store(store);
+        self.errors.clear();
+        self.folder_error = None;
+        cx.notify();
+    }
+
+    /// Asks for the folder to keep models in.
+    fn choose_folder(&mut self, cx: &mut Context<Self>) {
+        let paths = cx.prompt_for_paths(PathPromptOptions {
+            files: false,
+            directories: true,
+            multiple: false,
+            prompt: Some(t!("models.choose_folder").into_owned().into()),
+        });
+        cx.spawn(async move |this, cx| {
+            let result = paths.await;
+            let _ = this.update(cx, |this, cx| match result {
+                Ok(Ok(Some(paths))) => {
+                    if let Some(dir) = paths.into_iter().next() {
+                        cx.emit(ModelsEvent::ChangeFolder(Some(dir)));
+                    }
+                }
+                Ok(Err(e)) => {
+                    crate::app_log!("the folder picker failed: {e}");
+                    this.folder_error = Some(e.to_string());
+                    cx.notify();
+                }
+                // Cancelled.
+                Ok(Ok(None)) | Err(_) => {}
+            });
+        })
+        .detach();
     }
 
     pub fn set_license_accepted(&mut self, accepted: bool, cx: &mut Context<Self>) {
@@ -588,6 +630,9 @@ impl Render for ModelsPanel {
         };
         let license_url = license_url();
         let models_dir = self.store().dir().to_path_buf();
+        let custom_folder = models_dir != crate::settings::default_models_dir();
+        let downloading = !self.progress.is_empty();
+        let danger = cx.theme().danger;
 
         v_flex()
             .gap_3()
@@ -673,6 +718,28 @@ impl Render for ModelsPanel {
                                 cx.reveal_path(&models_dir);
                             }),
                     )
+                    .child(
+                        Button::new("change-folder")
+                            .ghost()
+                            .xsmall()
+                            .label(t!("models.change_folder").into_owned())
+                            .tooltip(t!("models.change_folder_note").into_owned())
+                            // Running downloads would finish in the old folder.
+                            .disabled(downloading)
+                            .on_click(cx.listener(|this, _, _, cx| this.choose_folder(cx))),
+                    )
+                    .when(custom_folder, |this| {
+                        this.child(
+                            Button::new("default-folder")
+                                .ghost()
+                                .xsmall()
+                                .label(t!("models.default_folder").into_owned())
+                                .disabled(downloading)
+                                .on_click(cx.listener(|_, _, _, cx| {
+                                    cx.emit(ModelsEvent::ChangeFolder(None))
+                                })),
+                        )
+                    })
                     .child(div().flex_1())
                     .child(catalog_text)
                     .when(
@@ -691,6 +758,14 @@ impl Render for ModelsPanel {
                         },
                     ),
             )
+            .when_some(self.folder_error.clone(), |this, error| {
+                this.child(
+                    div()
+                        .text_xs()
+                        .text_color(danger)
+                        .child(t!("models.folder_failed", message = error).into_owned()),
+                )
+            })
     }
 }
 

@@ -9,12 +9,14 @@ fn project_dirs() -> Option<directories::ProjectDirs> {
     directories::ProjectDirs::from("", "", "plamo-translate-desktop")
 }
 
-/// Directory holding downloaded models.
-pub fn models_dir() -> PathBuf {
-    project_dirs().map_or_else(
-        || PathBuf::from("models"),
-        |dirs| dirs.data_local_dir().join("models"),
-    )
+/// The data directory: the default models folder, caches and logs.
+fn data_dir() -> Option<PathBuf> {
+    project_dirs().map(|dirs| dirs.data_local_dir().to_path_buf())
+}
+
+/// Where models are kept unless the settings name another folder (see [`Settings::models_dir`]).
+pub fn default_models_dir() -> PathBuf {
+    data_dir().map_or_else(|| PathBuf::from("models"), |dir| dir.join("models"))
 }
 
 /// Catalog entries found on Hugging Face, cached for offline starts.
@@ -37,11 +39,9 @@ pub fn host_log_path() -> PathBuf {
     data_file("host.log")
 }
 
-/// A file in the data directory, which holds the models directory.
+/// A file in the data directory.
 pub fn data_file(name: &str) -> PathBuf {
-    models_dir()
-        .parent()
-        .map_or_else(|| PathBuf::from(name), |dir| dir.join(name))
+    data_dir().map_or_else(|| PathBuf::from(name), |dir| dir.join(name))
 }
 
 /// Where the settings are saved.
@@ -54,6 +54,8 @@ pub fn settings_path() -> Option<PathBuf> {
 pub struct Settings {
     /// Catalog id of the selected model.
     pub model: Option<String>,
+    /// The folder models are downloaded to and loaded from, if not the default one.
+    pub models_dir: Option<PathBuf>,
     /// Whether the user accepted the PLaMo Community License before downloading.
     pub license_accepted: bool,
     pub backend: BackendSettings,
@@ -75,6 +77,7 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             model: None,
+            models_dir: None,
             license_accepted: false,
             backend: BackendSettings::default(),
             glossary: String::new(),
@@ -89,6 +92,11 @@ impl Default for Settings {
 }
 
 impl Settings {
+    /// The folder models are downloaded to and loaded from.
+    pub fn models_dir(&self) -> PathBuf {
+        self.models_dir.clone().unwrap_or_else(default_models_dir)
+    }
+
     /// [`Self::ui_scale`] as a factor, kept within 50–300% whatever settings.json says.
     pub fn ui_scale_factor(&self) -> f32 {
         f32::from(self.ui_scale.clamp(50, 300)) / 100.0
@@ -334,6 +342,9 @@ mod tests {
         assert_eq!(s.ui_scale_factor(), 1.5);
         let s: Settings = serde_json::from_str(r#"{"ui_scale":1000}"#).unwrap();
         assert_eq!(s.ui_scale_factor(), 3.0);
+        assert_eq!(s.models_dir(), super::default_models_dir());
+        let s: Settings = serde_json::from_str(r#"{"models_dir":"/srv/models"}"#).unwrap();
+        assert_eq!(s.models_dir(), std::path::Path::new("/srv/models"));
         let s: Settings = serde_json::from_str(r#"{"model":"x","unknown":1}"#).unwrap();
         assert_eq!(s.model.as_deref(), Some("x"));
         assert!(!s.license_accepted);

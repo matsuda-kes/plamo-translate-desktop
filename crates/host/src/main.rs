@@ -259,7 +259,7 @@ impl Host {
     }
 
     fn send_options(&self, settings: &Settings) {
-        let store = ModelStore::new(settings::models_dir());
+        let store = ModelStore::new(settings.models_dir());
         let models = catalog::entries()
             .into_iter()
             .filter(|entry| store.state(entry).is_usable())
@@ -479,7 +479,7 @@ impl Host {
                 .into_owned();
             return Some((path, label));
         }
-        let store = ModelStore::new(settings::models_dir());
+        let store = ModelStore::new(settings.models_dir());
         let chosen = self
             .model_choice
             .as_deref()

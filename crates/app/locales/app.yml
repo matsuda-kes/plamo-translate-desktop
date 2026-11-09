@@ -241,6 +241,21 @@ models.folder:
 models.open_folder:
   en: Open
   ja: 開く
+models.change_folder:
+  en: Change…
+  ja: 変更…
+models.change_folder_note:
+  en: Downloaded models stay where they are. Move them into the new folder to keep using them.
+  ja: ダウンロード済みのモデルは移動しません。続けて使うには、新しい保存先へ移してください。
+models.default_folder:
+  en: Use the default
+  ja: 既定に戻す
+models.choose_folder:
+  en: Keep models here
+  ja: ここに保存
+models.folder_failed:
+  en: "Cannot choose a folder: %{message}. The folder can also be set as \"models_dir\" in settings.json."
+  ja: "保存先を選べません: %{message}。settings.json の \"models_dir\" でも指定できます。"
 
 lang.ja:
   en: Japanese

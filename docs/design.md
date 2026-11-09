@@ -284,7 +284,11 @@ The implementation is `engine::llama::Session` (one llama.cpp context of a loade
 - Storage:
   - Windows: `%LOCALAPPDATA%\plamo-translate-desktop\data\models`
   - Linux: `$XDG_DATA_HOME/plamo-translate-desktop/models` (usually `~/.local/share/...`)
-  - Both come from `directories::ProjectDirs::data_local_dir()`.
+  - Both come from `directories::ProjectDirs::data_local_dir()`, the data directory, which also holds the caches and logs.
+  - **Change…** next to the folder in the Models dialog picks another one (`models_dir` in the settings; **Use the default** clears it).
+    Nothing is moved. The model loaded from the old folder gives way to what the new one has, chosen as at start, and the host
+    reads the folder from the settings too. It is disabled while a download runs, which would finish in the old folder.
+    On Linux the folder picker is the desktop portal's; without one, the dialog says so and points to `settings.json`.
   - A GGUF path given on the command line or in `PLAMO_MODEL` overrides the selection (for development).
 - The Models dialog opens from the model button in the status bar. Each row shows its state and actions:
   - Not downloaded: Download.
@@ -431,7 +435,7 @@ Future idea: a global hotkey that translates the clipboard (with the `global-hot
 ## 10. Settings
 
 The app saves `settings.json` in the platform config directory (`crates/appdata/src/settings.rs`, shared with the host):
-the selected model, the license acceptance, the device and the last device measurement, the glossary, the UI language,
+the selected model, the models folder if not the default, the license acceptance, the device and the last device measurement, the glossary, the UI language,
 the theme, the UI size, the chunk and history sizes, synchronized scrolling, and whether to check for new versions.
 The language pair, style, context, auto-translate flag, and window geometry are not saved.
 A file that does not parse (or is not UTF-8; a byte order mark is skipped) is kept as `settings.json.invalid`
