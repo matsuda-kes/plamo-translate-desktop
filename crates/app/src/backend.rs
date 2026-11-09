@@ -16,6 +16,7 @@ use rust_i18n::t;
 use crate::lang::{self, Choice};
 use crate::models::format_bytes;
 use crate::settings::{BackendSettings, DeviceSetting, MeasuredChoice};
+use crate::view::scaled;
 
 /// Memory available to the model on `device`, or system memory for the CPU.
 pub fn available_memory(device: Option<&Device>, devices: &[Device]) -> u64 {
@@ -230,11 +231,15 @@ impl Render for BackendPanel {
             .child(
                 h_flex()
                     .gap_3()
-                    .child(div().w(px(110.)).child(t!("backend.device").into_owned()))
+                    .child(
+                        div()
+                            .w(scaled(110.))
+                            .child(t!("backend.device").into_owned()),
+                    )
                     .child(
                         Select::new(&self.device_select)
-                            .w(px(420.))
-                            .menu_width(px(480.)),
+                            .w(scaled(420.))
+                            .menu_width(scaled(480.)),
                     )
                     .child(
                         Button::new("measure-devices")

@@ -216,7 +216,7 @@ fn browser_settings(
                 .text_sm()
                 .child(
                     div()
-                        .w(px(140.))
+                        .w(scaled(140.))
                         .flex_none()
                         .child(t!("settings.browser").into_owned()),
                 )
@@ -254,13 +254,35 @@ fn browser_settings(
         .into_any_element()
 }
 
-/// Switches between the light and dark theme, following the OS for [`ThemeSetting::System`].
-pub fn apply_theme(theme: ThemeSetting, window: &mut Window, cx: &mut App) {
-    match theme {
+/// The theme's font sizes at 100%. The theme's font size is also the rem size, so lengths in rems
+/// follow the UI size.
+const FONT_SIZE: f32 = 16.;
+const MONO_FONT_SIZE: f32 = 13.;
+
+/// A length of `px` pixels at 100%, in rems, so it follows the UI size.
+pub fn scaled(px: f32) -> Rems {
+    rems(px / FONT_SIZE)
+}
+
+/// [`scaled`] in pixels, for what takes no rems (dialog widths, scroll offsets).
+pub fn scaled_px(px: f32, cx: &App) -> Pixels {
+    cx.theme().font_size * (px / FONT_SIZE)
+}
+
+/// Applies the theme (light or dark, following the OS for [`ThemeSetting::System`]) and the UI
+/// size of `settings`.
+pub fn apply_appearance(settings: &Settings, window: &mut Window, cx: &mut App) {
+    match settings.theme {
         ThemeSetting::System => Theme::sync_system_appearance(Some(window), cx),
         ThemeSetting::Light => Theme::change(ThemeMode::Light, Some(window), cx),
         ThemeSetting::Dark => Theme::change(ThemeMode::Dark, Some(window), cx),
     }
+    // After the theme, which could bring its own sizes.
+    let scale = settings.ui_scale_factor();
+    Theme::update(cx, |theme| {
+        theme.font_size = px(FONT_SIZE * scale);
+        theme.mono_font_size = px(MONO_FONT_SIZE * scale);
+    });
     window.refresh();
 }
 
@@ -277,6 +299,7 @@ type TargetSelect = SelectState<SearchableVec<Choice<TargetChoice>>>;
 type StyleSelect = SelectState<Vec<Choice<StyleChoice>>>;
 type UiLanguageSelect = SelectState<Vec<Choice<UiLanguage>>>;
 type ThemeSelect = SelectState<Vec<Choice<ThemeSetting>>>;
+type ScaleSelect = SelectState<Vec<Choice<u16>>>;
 type TokensSelect = SelectState<Vec<Choice<usize>>>;
 
 /// A finished translation, kept to show it again without translating.
@@ -418,6 +441,7 @@ pub struct TranslatorView {
     style_select: Entity<StyleSelect>,
     ui_language_select: Entity<UiLanguageSelect>,
     theme_select: Entity<ThemeSelect>,
+    ui_scale_select: Entity<ScaleSelect>,
     chunk_select: Entity<TokensSelect>,
     history_select: Entity<TokensSelect>,
     source_choice: SourceChoice,
@@ -576,6 +600,11 @@ impl TranslatorView {
             let selected = lang::position(&choices, &settings.theme).map(IndexPath::new);
             cx.new(|cx| SelectState::new(choices, selected, window, cx))
         };
+        let ui_scale_select = {
+            let choices = lang::ui_scale_choices(settings.ui_scale);
+            let selected = lang::position(&choices, &settings.ui_scale).map(IndexPath::new);
+            cx.new(|cx| SelectState::new(choices, selected, window, cx))
+        };
         let (chunk_choices, history_choices) = token_choices(&settings.document);
         let chunk_select = {
             let selected = lang::position(&chunk_choices, &settings.document.chunk_tokens);
@@ -646,6 +675,11 @@ impl TranslatorView {
                     this.set_theme(*theme, window, cx);
                 }
             }),
+            cx.subscribe_in(&ui_scale_select, window, |this, _, event, window, cx| {
+                if let SelectEvent::Confirm(Some(scale)) = event {
+                    this.set_ui_scale(*scale, window, cx);
+                }
+            }),
             cx.subscribe_in(&chunk_select, window, |this, _, event, window, cx| {
                 if let SelectEvent::Confirm(Some(tokens)) = event {
                     this.set_document(
@@ -672,7 +706,7 @@ impl TranslatorView {
             }),
             cx.observe_window_appearance(window, |this, window, cx| {
                 if this.settings.theme == ThemeSetting::System {
-                    apply_theme(ThemeSetting::System, window, cx);
+                    apply_appearance(&this.settings, window, cx);
                 }
             }),
             cx.subscribe_in(&style_select, window, |this, _, event, window, cx| {
@@ -735,6 +769,7 @@ impl TranslatorView {
             style_select,
             ui_language_select,
             theme_select,
+            ui_scale_select,
             chunk_select,
             history_select,
             source_choice,
@@ -828,11 +863,11 @@ impl TranslatorView {
     ) {
         let view = cx.entity().downgrade();
         let url = crate::models::license_url();
-        window.open_dialog(cx, move |dialog, _, _| {
+        window.open_dialog(cx, move |dialog, _, cx| {
             let accept_view = view.clone();
             dialog
                 .title(t!("license.title").into_owned())
-                .w(px(560.))
+                .w(scaled_px(560., cx))
                 .overlay_closable(false)
                 .close_button(false)
                 .child(
@@ -1097,6 +1132,7 @@ impl TranslatorView {
         }
         let language = self.ui_language_select.clone();
         let theme = self.theme_select.clone();
+        let ui_scale = self.ui_scale_select.clone();
         let chunk = self.chunk_select.clone();
         let history = self.history_select.clone();
         let view = cx.entity().downgrade();
@@ -1128,24 +1164,34 @@ impl TranslatorView {
                 h_flex()
                     .gap_3()
                     .text_sm()
-                    .child(div().w(px(140.)).child(t!(label).into_owned()))
+                    .child(div().w(scaled(140.)).child(t!(label).into_owned()))
                     .child(select)
             };
-            let select = |state: &Entity<_>| Select::new(state).w(px(260.)).into_any_element();
+            let select = |state: &Entity<_>| Select::new(state).w(scaled(260.)).into_any_element();
             dialog
                 .title(t!("settings.title").into_owned())
-                .w(px(600.))
+                .w(scaled_px(600., cx))
                 .child(
                     v_flex()
                         .gap_3()
                         .child(row(
                             "settings.language",
-                            Select::new(&language).w(px(260.)).into_any_element(),
+                            Select::new(&language).w(scaled(260.)).into_any_element(),
                         ))
                         .child(row(
                             "settings.theme",
-                            Select::new(&theme).w(px(260.)).into_any_element(),
+                            Select::new(&theme).w(scaled(260.)).into_any_element(),
                         ))
+                        .child(row(
+                            "settings.ui_scale",
+                            Select::new(&ui_scale).w(scaled(260.)).into_any_element(),
+                        ))
+                        .child(
+                            div()
+                                .text_xs()
+                                .text_color(muted)
+                                .child(t!("settings.ui_scale_note").into_owned()),
+                        )
                         .child(row("settings.chunk", select(&chunk)))
                         .child(row("settings.history", select(&history)))
                         .child(
@@ -1240,7 +1286,17 @@ impl TranslatorView {
         self.settings.theme = theme;
         self.settings.save();
         crate::app_log!("theme set to {theme:?}");
-        apply_theme(theme, window, cx);
+        apply_appearance(&self.settings, window, cx);
+    }
+
+    fn set_ui_scale(&mut self, scale: u16, window: &mut Window, cx: &mut Context<Self>) {
+        if self.settings.ui_scale == scale {
+            return;
+        }
+        self.settings.ui_scale = scale;
+        self.settings.save();
+        crate::app_log!("UI size set to {scale}%");
+        apply_appearance(&self.settings, window, cx);
     }
 
     fn set_ui_language(
@@ -1286,6 +1342,11 @@ impl TranslatorView {
             state.set_items(lang::theme_choices(), window, cx);
             state.set_selected_value(&theme, window, cx);
         });
+        let ui_scale = self.settings.ui_scale;
+        self.ui_scale_select.update(cx, |state, cx| {
+            state.set_items(lang::ui_scale_choices(ui_scale), window, cx);
+            state.set_selected_value(&ui_scale, window, cx);
+        });
         let document = self.settings.document;
         let (chunk_choices, history_choices) = token_choices(&document);
         self.chunk_select.update(cx, |state, cx| {
@@ -1313,10 +1374,10 @@ impl TranslatorView {
     fn open_models(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let panel = self.models.clone();
         let backend = self.backend.clone();
-        window.open_dialog(cx, move |dialog, _, _| {
+        window.open_dialog(cx, move |dialog, _, cx| {
             dialog
                 .title(t!("models.title").into_owned())
-                .w(px(900.))
+                .w(scaled_px(900., cx))
                 .child(v_flex().gap_4().child(backend.clone()).child(panel.clone()))
         });
     }
@@ -1947,7 +2008,7 @@ impl TranslatorView {
         };
         self.next_cut += 1;
         // A few lines below the top, so the text before it is in view too.
-        let y = px(48.);
+        let y = scaled_px(48., cx);
         self.scroll_pane(Side::Output, cut.output.start, y, cx);
         self.output
             .update(cx, |state, cx| state.set_selected_range(cut.output, cx));
@@ -2197,7 +2258,7 @@ impl TranslatorView {
             };
             dialog
                 .title(t!("update.title", version = release.version.to_string()).into_owned())
-                .w(px(520.))
+                .w(scaled_px(520., cx))
                 .child(
                     v_flex()
                         .gap_3()
@@ -2555,8 +2616,8 @@ impl Render for TranslatorView {
             .gap_2()
             .child(
                 Select::new(&self.source_select)
-                    .w(px(210.))
-                    .menu_width(px(260.))
+                    .w(scaled(210.))
+                    .menu_width(scaled(260.))
                     .search_placeholder(t!("search.language").into_owned()),
             )
             .child(
@@ -2569,12 +2630,12 @@ impl Render for TranslatorView {
             )
             .child(
                 Select::new(&self.target_select)
-                    .w(px(230.))
-                    .menu_width(px(260.))
+                    .w(scaled(230.))
+                    .menu_width(scaled(260.))
                     .search_placeholder(t!("search.language").into_owned()),
             )
             .when(shows_style, |this| {
-                this.child(Select::new(&self.style_select).w(px(190.)))
+                this.child(Select::new(&self.style_select).w(scaled(190.)))
             })
             .child(div().flex_1())
             .child(
@@ -2743,7 +2804,7 @@ impl Render for TranslatorView {
                                         .text_color(muted)
                                         .child(t!("options.context").into_owned()),
                                 )
-                                .child(Textarea::new(&self.context_input).h(px(96.))),
+                                .child(Textarea::new(&self.context_input).h(scaled(96.))),
                         )
                         .child(
                             v_flex()
@@ -2756,7 +2817,7 @@ impl Render for TranslatorView {
                                         .text_color(muted)
                                         .child(t!("options.glossary").into_owned()),
                                 )
-                                .child(Textarea::new(&self.glossary_input).h(px(96.))),
+                                .child(Textarea::new(&self.glossary_input).h(scaled(96.))),
                         ),
                 )
             })

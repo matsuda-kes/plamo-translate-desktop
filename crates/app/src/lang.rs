@@ -181,6 +181,31 @@ pub const CHUNK_TOKEN_PRESETS: &[usize] = &[256, 512, 1024, 2048, 4096];
 /// History size options, in tokens. History is also capped at a third of the context.
 pub const HISTORY_TOKEN_PRESETS: &[usize] = &[0, 1024, 2048, 4096, 8192];
 
+/// The interface sizes offered, in percent.
+pub const UI_SCALE_PRESETS: &[u16] = &[100, 125, 150, 175, 200];
+
+/// Interface size options: the presets, plus `current` if it is not one of them (a value edited
+/// in settings.json). 100% is marked as the default.
+pub fn ui_scale_choices(current: u16) -> Vec<Choice<u16>> {
+    let mut values = UI_SCALE_PRESETS.to_vec();
+    if !values.contains(&current) {
+        values.push(current);
+        values.sort_unstable();
+    }
+    values
+        .into_iter()
+        .map(|n| {
+            let title = format!("{n}%");
+            let title = if n == 100 {
+                t!("settings.default", value = title).into_owned()
+            } else {
+                title
+            };
+            Choice::new(n, title, &[])
+        })
+        .collect()
+}
+
 /// Token count options: `presets`, plus `current` if it is not one of them (a value edited in
 /// settings.json). `default` is marked.
 pub fn token_choices(presets: &[usize], current: usize, default: usize) -> Vec<Choice<usize>> {

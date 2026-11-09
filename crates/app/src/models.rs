@@ -16,6 +16,8 @@ use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
 use rust_i18n::t;
 
+use crate::view::scaled;
+
 const LICENSE_URL_EN: &str = "https://plamo.preferredai.jp/info/plamo-community-license-en";
 const LICENSE_URL_JA: &str = "https://plamo.preferredai.jp/info/plamo-community-license-ja";
 /// Where the quality figures come from.
@@ -420,7 +422,7 @@ impl ModelsPanel {
         let button = |name: &str| Button::new(SharedString::from(format!("{name}-{id}"))).xsmall();
         // A fixed-width column keeps Delete in the same place whichever action precedes it.
         let actions = h_flex()
-            .w(px(210.))
+            .w(scaled(210.))
             .flex_shrink_0()
             .gap_1()
             .justify_end()
@@ -529,7 +531,7 @@ impl ModelsPanel {
             .when(is_active, |this| this.bg(secondary))
             .child(
                 v_flex()
-                    .w(px(230.))
+                    .w(scaled(230.))
                     .flex_shrink_0()
                     .child(
                         h_flex()
@@ -549,7 +551,7 @@ impl ModelsPanel {
             )
             .child(
                 div()
-                    .w(px(70.))
+                    .w(scaled(70.))
                     .flex_shrink_0()
                     .text_color(muted)
                     .child(format_bytes(entry.bytes)),
@@ -649,7 +651,7 @@ impl Render for ModelsPanel {
             .child(
                 div()
                     .id("model-list")
-                    .max_h(px(440.))
+                    .max_h(scaled(440.))
                     .overflow_y_scroll()
                     .child(v_flex().gap_0p5().children(rows)),
             )
@@ -752,7 +754,7 @@ fn quant_note(quant: &str) -> Option<String> {
 fn quality_cell(entry: &CatalogEntry, muted: Hsla, warning: Hsla, danger: Hsla) -> AnyElement {
     let (Some(q), Some(r)) = (entry.quality(), entry.reference_quality()) else {
         return div()
-            .w(px(170.))
+            .w(scaled(170.))
             .flex_shrink_0()
             .text_xs()
             .text_color(muted)
@@ -778,7 +780,7 @@ fn quality_cell(entry: &CatalogEntry, muted: Hsla, warning: Hsla, danger: Hsla) 
             )
     };
     v_flex()
-        .w(px(170.))
+        .w(scaled(170.))
         .flex_shrink_0()
         .text_xs()
         .child(line(

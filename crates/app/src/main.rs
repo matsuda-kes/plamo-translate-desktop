@@ -101,19 +101,31 @@ fn main() {
             view::bind_keys(cx);
             #[cfg(target_os = "macos")]
             macos::init(cx);
+            // A larger UI size opens a larger window too, within the screen.
+            let scale = settings.ui_scale_factor();
+            let screen = cx.primary_display().map(|d| d.bounds().size);
+            let fit = |width: f32, height: f32| {
+                let (max_width, max_height) = screen.map_or((f32::MAX, f32::MAX), |s| {
+                    (f32::from(s.width) * 0.9, f32::from(s.height) * 0.9)
+                });
+                size(
+                    px((width * scale).min(max_width)),
+                    px((height * scale).min(max_height)),
+                )
+            };
             let options = WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
                     None,
-                    size(px(1100.), px(720.)),
+                    fit(1100., 720.),
                     cx,
                 ))),
-                window_min_size: Some(size(px(640.), px(400.))),
+                window_min_size: Some(fit(640., 400.)),
                 // Matches the desktop entry name on Linux, so the window gets its icon.
                 app_id: Some("plamo-translate-desktop".into()),
                 ..TitleBar::window_options()
             };
             gpui_kit::open_window(options, cx, |window, cx| {
-                view::apply_theme(settings.theme, window, cx);
+                view::apply_appearance(&settings, window, cx);
                 cx.new(|cx| TranslatorView::new(custom_model, settings, window, cx))
             })
             .expect("failed to open the main window");

@@ -11,6 +11,7 @@ All notable changes to PLaMo Translate Desktop. Each release's section here also
 - The browser extension follows: when the app has updated its copy of the extension, the panel offers **Reload** to load the new version. The extension's own package says in the panel when a new version is out (at most once a day; **Check for new versions** in its settings turns this off).
 - A keyboard shortcut in the browser extension translates the page, as **Translate this page with PLaMo** in the right-click menu does. It has no key at first: set one at `chrome://extensions/shortcuts`.
 - When PFN publishes a new version of a downloaded model, its row in the Models dialog says so, with the date, and **Update** downloads it (the button's tooltip says what changed). The model stays usable meanwhile; the one in use is loaded again once the new file is in place.
+- **UI size** in Settings (100–200%) enlarges the interface on top of the display scaling of the OS, for a high-DPI display that a Linux desktop does not scale ([#5](https://github.com/tanakh/plamo-translate-desktop/issues/5)). The window opens larger to match. The README says how the scale is chosen on Linux, and that `GPUI_X11_SCALE_FACTOR` sets it under X11.
 - A keyboard shortcut in the browser extension opens the side panel and translates the selected text there, as **Translate with PLaMo** in the right-click menu does; with nothing selected, it puts the cursor in the panel's text box. It has no key at first: set one at `chrome://extensions/shortcuts`.
 
 ### Changed

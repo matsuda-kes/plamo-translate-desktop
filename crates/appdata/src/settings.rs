@@ -61,6 +61,9 @@ pub struct Settings {
     pub glossary: String,
     pub ui_language: UiLanguage,
     pub theme: ThemeSetting,
+    /// Size of the interface in percent, on top of the scaling the OS applies (some Linux
+    /// desktops apply none on a high-DPI display).
+    pub ui_scale: u16,
     pub document: DocumentSettings,
     /// Scroll the source and the translation together, and show the counterpart of the caret.
     pub sync_scroll: bool,
@@ -77,10 +80,18 @@ impl Default for Settings {
             glossary: String::new(),
             ui_language: UiLanguage::default(),
             theme: ThemeSetting::default(),
+            ui_scale: 100,
             document: DocumentSettings::default(),
             sync_scroll: true,
             check_updates: true,
         }
+    }
+}
+
+impl Settings {
+    /// [`Self::ui_scale`] as a factor, kept within 50–300% whatever settings.json says.
+    pub fn ui_scale_factor(&self) -> f32 {
+        f32::from(self.ui_scale.clamp(50, 300)) / 100.0
     }
 }
 
@@ -318,6 +329,11 @@ mod tests {
     fn missing_fields_take_defaults() {
         let s: Settings = serde_json::from_str("{}").unwrap();
         assert_eq!(s, Settings::default());
+        assert_eq!(s.ui_scale_factor(), 1.0);
+        let s: Settings = serde_json::from_str(r#"{"ui_scale":150}"#).unwrap();
+        assert_eq!(s.ui_scale_factor(), 1.5);
+        let s: Settings = serde_json::from_str(r#"{"ui_scale":1000}"#).unwrap();
+        assert_eq!(s.ui_scale_factor(), 3.0);
         let s: Settings = serde_json::from_str(r#"{"model":"x","unknown":1}"#).unwrap();
         assert_eq!(s.model.as_deref(), Some("x"));
         assert!(!s.license_accepted);

@@ -22,6 +22,7 @@ locally on your computer. It works offline once a model is downloaded. Written i
 - Runs on the CPU (AVX2 or AVX-512) or on a GPU through Vulkan. Linux source builds can also use ROCm. The device is selectable; Automatic uses the fastest one measured on this PC, or else the discrete GPU.
 - English and Japanese UI. It follows the OS language by default and can be changed under Settings (the gear in the status bar). `PLAMO_LANG=ja` or `en` overrides both.
 - Light and dark themes. The default follows the OS; Settings can fix either one.
+- **UI size** in Settings (100–200%) enlarges the interface on top of the display scaling of the OS, for a high-DPI display the desktop does not scale.
 - The source and the translation scroll together, and moving the caret in one selects the corresponding paragraph in the other (can be turned off in Settings).
 - Updates: the app asks GitHub at most once a day whether a newer release is out, and the status bar then says so.
   Clicking it downloads the new version (checked against `SHA256SUMS.txt`), and **Restart to update** then starts the new version.
@@ -63,6 +64,9 @@ with their SHA-256 checksums in `SHA256SUMS.txt`. For the latest changes, build 
   - It is built on Ubuntu 24.04 and needs glibc 2.39 or later (Ubuntu 24.04, Debian 13, Fedora 40, or newer),
     plus `libgomp1`, `libxkbcommon-x11-0`, and `libxcb1`, which desktop installations usually have.
   - It needs a Wayland or X11 session with a Vulkan driver, which the UI uses for rendering and translation can use on the GPU, and a CJK font such as `fonts-noto-cjk`.
+  - On a high-DPI display: under Wayland the app follows the scale the compositor gives each display, moving between them included.
+    Under X11 one scale applies to every display, read at start from `Xft.dpi` or, without it, the primary display's size;
+    `GPUI_X11_SCALE_FACTOR=2` (any number) sets it instead. If the interface is still too small, raise **UI size** in Settings.
   - To add it to the application menu, run this in the extracted folder:
 
     ```sh

@@ -398,7 +398,7 @@ The implementation is `engine::llama::Session` (one llama.cpp context of a loade
 - Streamed text is applied as edits at the end of the output pane. Replacing the whole value every frame laid out the entire translation
   again and stalled the UI on long texts.
 - The status bar ends a translation with the time taken, the tokens, and the speed. When passages were cut, clicking the message selects the next one in both panes.
-- Settings (the gear): display language, theme, chunk size, history, synchronized scrolling, and the browser extension
+- Settings (the gear): display language, theme, UI size, chunk size, history, synchronized scrolling, and the browser extension
   (Connect and Disconnect the host, Open extension folder; see §12).
 - Streaming keeps the output pane's scroll position, so a reader can scroll through a long translation while it grows.
   A new translation starts at the top.
@@ -413,6 +413,12 @@ The implementation is `engine::llama::Session` (one llama.cpp context of a loade
   - It applies while the source is the text that was translated; cached results keep their chunks for it.
 - Theme: Settings → Theme (System, Light, or Dark). System follows the OS, including changes while the app runs.
   The light and dark themes come from gpui-kit.
+- UI size: Settings → UI size (100–200%, on top of the OS's display scaling). GPUI takes the scale from the OS: per display on Windows,
+  macOS and Wayland, and on X11 once at start for every display (`GPUI_X11_SCALE_FACTOR`, else `Xft.dpi`, else the primary display's
+  physical size). Some desktops give none on a high-DPI display, hence the setting.
+  - It sets the theme's font size (16 px at 100%), which is also the rem size. gpui-kit's components are sized in rems, and the app's
+    own fixed lengths go through `view::scaled` (rems) or `view::scaled_px` (pixels, for dialog widths), so the whole interface follows.
+  - The window opens at the default size times the UI size, within 90% of the primary display.
 - UI strings live in `crates/app/locales/app.yml`. The language is the first that applies of:
   1. `PLAMO_LANG` (a development override).
   2. Settings → Display language (System, English, or 日本語).
@@ -426,7 +432,7 @@ Future idea: a global hotkey that translates the clipboard (with the `global-hot
 
 The app saves `settings.json` in the platform config directory (`crates/appdata/src/settings.rs`, shared with the host):
 the selected model, the license acceptance, the device and the last device measurement, the glossary, the UI language,
-the theme, the chunk and history sizes, synchronized scrolling, and whether to check for new versions.
+the theme, the UI size, the chunk and history sizes, synchronized scrolling, and whether to check for new versions.
 The language pair, style, context, auto-translate flag, and window geometry are not saved.
 A file that does not parse (or is not UTF-8; a byte order mark is skipped) is kept as `settings.json.invalid`
 instead of being overwritten.

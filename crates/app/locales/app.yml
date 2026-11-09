@@ -562,6 +562,12 @@ settings.theme_light:
 settings.theme_dark:
   en: Dark
   ja: ダーク
+settings.ui_scale:
+  en: UI size
+  ja: 表示の大きさ
+settings.ui_scale_note:
+  en: "On top of the display scaling of the OS. For a high-DPI display that the desktop does not scale (some Linux desktops)."
+  ja: "OS の表示スケールに上乗せします。高解像度のディスプレイを OS が拡大しない場合（一部の Linux デスクトップ）に使ってください。"
 
 models.quality_legend:
   en: "Quality (higher is better): Ja↔En = PFTB, multilingual = FLORES+ chrF++ (Ja↔14 languages). In parentheses: difference from the unquantized model."
