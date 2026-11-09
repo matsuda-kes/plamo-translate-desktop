@@ -18,24 +18,35 @@
 import { Wllama } from "./vendor/wllama/wllama.js";
 import { History, STOP, estimateTokens, prompt, resolveTarget, split } from "./translator.js";
 
+/** What the commit of the built-in files changed (see BUILTIN). */
+const TARGET_LANG_AUTO = "Update the chat template: switch between Japanese and English by default (target_lang=auto)";
+
 /**
- * The models offered: the app's catalog entries that fit WebAssembly's 4 GB of memory, at the
- * revision of 2026-11-06 (the files of the first revision are no longer served).
+ * The models offered: the app's catalog entries that fit WebAssembly's 4 GB of memory, with the
+ * files published when this version was built (2026-11-08). Hugging Face has no version numbers,
+ * so a file's version is the commit that last changed it: its date (`published`) and title
+ * (`change`). PFN replaces the files now and then (so far only their chat template changed, which
+ * this extension does not use) and stops serving old ones, so newer files are looked for on
+ * Hugging Face (see refreshCatalog).
  */
-const MODELS = [
+const BUILTIN = [
   {
     id: "plamo-3-translate-2b-Q4_K_M",
     label: "2B · Q4_K_M",
     repo: "pfnet/plamo-3-translate-2b-GGUF",
-    revision: "232fbd7916519edecddfdae0beae7e76fe70453f",
-    bytes: 1807199392,
+    revision: "228a27cc0bb4f111219963848d50a3127c16ca73",
+    bytes: 1807203040,
+    published: "2026-11-08T05:48:42Z",
+    change: TARGET_LANG_AUTO,
   },
   {
     id: "plamo-3-translate-0.8b-Q4_K_M",
     label: "0.8B · Q4_K_M",
     repo: "pfnet/plamo-3-translate-0.8b-GGUF",
-    revision: "dbeb0856cb0b004b484f190bb71dd65876297013",
-    bytes: 573123200,
+    revision: "e10c327b7a7ce84ffc427cb4b09360b781429fda",
+    bytes: 573126848,
+    published: "2026-11-08T05:48:24Z",
+    change: TARGET_LANG_AUTO,
   },
 ];
 const fileName = (model) => `${model.id}.gguf`;
@@ -101,12 +112,108 @@ async function modelsDir() {
   return root.getDirectoryHandle("models", { create: true });
 }
 
-async function isDownloaded(model) {
+/**
+ * "downloaded" (the file of the newest version), "outdated" (a file of another version, used as
+ * it is), or null. Downloads only reach the file's name complete, so any file there is whole.
+ */
+async function localState(model) {
   try {
     const file = await (await (await modelsDir()).getFileHandle(fileName(model))).getFile();
-    return file.size === model.bytes;
+    if (file.size === model.bytes) return "downloaded";
+    return file.size > 0 ? "outdated" : null;
   } catch {
-    return false;
+    return null;
+  }
+}
+
+/** Whether there is a file of `model` to load, of whatever version. */
+async function isDownloaded(model) {
+  return (await localState(model)) !== null;
+}
+
+// ---- Catalog ----
+
+const CATALOG_KEY = "catalog";
+const CATALOG_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
+/** What the last check on Hugging Face found: { at, models: { [id]: { revision, bytes, published, change } } }. */
+function cachedCatalog() {
+  try {
+    return JSON.parse(localStorage.getItem(CATALOG_KEY) ?? "null");
+  } catch {
+    return null;
+  }
+}
+
+/** `2026-11-08T05:48:42.000Z` → `2026-11-08T05:48:42Z`, the form of BUILTIN, so dates compare as strings. */
+function timestamp(date) {
+  return typeof date === "string" && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?Z$/.test(date) ? date.replace(/\.\d+Z$/, "Z") : null;
+}
+
+/** Whether `found` has the shape a check on Hugging Face gives (the cache could be anything). */
+function isValidFound(found) {
+  return (
+    typeof found?.revision === "string" &&
+    /^[0-9a-f]{40}$/.test(found.revision) &&
+    Number.isSafeInteger(found.bytes) &&
+    found.bytes > 0 &&
+    timestamp(found.published) === found.published &&
+    typeof found.change === "string"
+  );
+}
+
+/** The built-in models, each replaced by a newer file found on Hugging Face. */
+function currentModels(found) {
+  return BUILTIN.map((model) => {
+    const newer = found?.[model.id];
+    return isValidFound(newer) && newer.published > model.published ? { ...model, ...newer } : model;
+  });
+}
+
+let MODELS = currentModels(cachedCatalog()?.models);
+
+/**
+ * Looks on Hugging Face for newer files of the models, at most once a day. It never holds up a
+ * translation, and without a connection nothing changes and nothing is shown: the models
+ * downloaded work offline, and the next start of this document tries again.
+ */
+async function refreshCatalog() {
+  const cached = cachedCatalog();
+  if (cached && Date.now() - cached.at < CATALOG_INTERVAL_MS) return;
+  const found = {};
+  try {
+    for (const repo of new Set(BUILTIN.map((m) => m.repo))) {
+      // `expand` adds the commit that last changed each file.
+      const response = await fetch(`https://huggingface.co/api/models/${repo}/tree/main?expand=true`, {
+        signal: AbortSignal.timeout(15_000),
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      for (const item of await response.json()) {
+        const model = BUILTIN.find((m) => m.repo === repo && fileName(m) === item?.path);
+        const commit = item?.lastCommit;
+        if (!model || item.type !== "file" || !item.lfs || !commit) continue;
+        const entry = {
+          revision: commit.id,
+          bytes: item.lfs.size,
+          published: timestamp(commit.date),
+          change: String(commit.title ?? "").slice(0, 200),
+        };
+        if (isValidFound(entry)) found[model.id] = entry;
+      }
+    }
+  } catch (e) {
+    console.warn("cannot check Hugging Face for newer models:", e);
+    return;
+  }
+  try {
+    localStorage.setItem(CATALOG_KEY, JSON.stringify({ at: Date.now(), models: found }));
+  } catch {}
+  const next = currentModels(found);
+  const changed = next.some((m, i) => m.revision !== MODELS[i].revision);
+  MODELS = next;
+  if (changed) {
+    enqueue(setIdleStatus);
+    sendOptions();
   }
 }
 
@@ -121,11 +228,17 @@ async function selectedModel() {
 /** The partial download of `model`, named for its revision so that another is never continued. */
 const partName = (model) => `${fileName(model)}.${model.revision.slice(0, 12)}.part`;
 
-/** Removes the partial downloads of `model` other than `keep` (other revisions, older names). */
+/**
+ * Removes the partial downloads of `model` other than `keep` (other revisions, older names), and
+ * the swap files a write left when its document closed (`.crswap`, which OPFS never uses again).
+ * No write may be running for `model`.
+ */
 async function removeStaleParts(dir, model, keep = null) {
   const stale = [];
   for await (const name of dir.keys()) {
-    if (name !== keep && name.startsWith(`${fileName(model)}.`) && name.endsWith(".part")) stale.push(name);
+    if (name !== keep && name.startsWith(`${fileName(model)}.`) && (name.endsWith(".part") || name.endsWith(".crswap"))) {
+      stale.push(name);
+    }
   }
   for (const name of stale) await dir.removeEntry(name).catch(() => {});
 }
@@ -188,7 +301,12 @@ async function download(model) {
     if (existing !== model.bytes) {
       throw new Error(`downloaded ${existing} bytes instead of ${model.bytes}`);
     }
-    await part.move(dir, fileName(model));
+    // In place of a file of another version, unless a load is reading it: a loaded model is in
+    // memory, and stays in use. Should the move fail, the finished part is moved the next time.
+    await enqueue(async () => {
+      await dir.removeEntry(fileName(model)).catch(() => {});
+      await part.move(dir, fileName(model));
+    });
     report({ state: "done", received: existing });
   } catch (e) {
     // Keeps what arrived for the next try.
@@ -204,7 +322,7 @@ async function download(model) {
 async function deleteModel(model) {
   // After the load in progress, ending the translations that use the model.
   await enqueue(async () => {
-    if (loaded?.model === model) await unload();
+    if (loaded?.model.id === model.id) await unload();
   });
   const dir = await modelsDir();
   await dir.removeEntry(fileName(model)).catch(() => {});
@@ -273,7 +391,7 @@ async function measure() {
 /** Loads `model` on `device` (in the load chain), unless it is loaded already. */
 async function load(model, device) {
   // The thread count matters on the CPU only (also when WebGPU was asked for but not used).
-  if (loaded?.model === model && loaded.device === device && (loaded.gpu || loaded.requestedThreads === settings.threads)) return;
+  if (loaded?.model.id === model.id && loaded.device === device && (loaded.gpu || loaded.requestedThreads === settings.threads)) return;
   await unload();
   setStatus({ state: "loading", model: model.label, device: device === "gpu" ? "WebGPU" : "CPU" });
   const file = await (await (await modelsDir()).getFileHandle(fileName(model))).getFile();
@@ -649,7 +767,16 @@ async function sendOptions() {
   const gpu = await gpuDescription();
   const models = [];
   for (const model of MODELS) {
-    models.push({ id: model.id, label: model.label, bytes: model.bytes, downloaded: await isDownloaded(model), downloading: downloads.has(model.id) });
+    const state = await localState(model);
+    models.push({
+      id: model.id,
+      label: model.label,
+      bytes: model.bytes,
+      downloaded: state !== null,
+      downloading: downloads.has(model.id),
+      // A newer version than the file there: its day and what it changed.
+      ...(state === "outdated" ? { newer: { date: model.published.slice(0, 10), change: model.change } } : {}),
+    });
   }
   post({
     type: "options",
@@ -734,3 +861,10 @@ port.onDisconnect.addListener(() => {
 // Ask for the persistent storage that keeps the models when space runs short.
 navigator.storage.persist?.().catch(() => {});
 enqueue(setIdleStatus);
+// Nothing downloads before this document asks, so what a closed one left can go.
+modelsDir()
+  .then(async (dir) => {
+    for (const model of MODELS) await removeStaleParts(dir, model, partName(model));
+  })
+  .catch(() => {});
+refreshCatalog();

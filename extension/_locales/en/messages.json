@@ -443,6 +443,17 @@
   "deleteModel": {
     "message": "Delete"
   },
+  "updateModel": {
+    "message": "Update"
+  },
+  "newerVersion": {
+    "message": "A newer version is out ($DATE$)",
+    "placeholders": {
+      "date": {
+        "content": "$1"
+      }
+    }
+  },
   "downloadFailed": {
     "message": "The download failed: $ERROR$",
     "placeholders": {

@@ -52,6 +52,7 @@ details select { flex: 1; min-width: 0; }
 .model-row .name { flex: 1; min-width: 0; }
 .model-row .state { color: var(--muted); }
 .model-row .state.error { color: var(--error); }
+.model-note { margin: -2px 0 4px; font-size: 12px; color: var(--muted); }
 /* Like a model row: the measurement on the left, wrapping, and the button at the right end. */
 /* A checkbox under a setting, aligned with the selects. */
 details label.check { margin-left: calc(5em + 8px); gap: 6px; }

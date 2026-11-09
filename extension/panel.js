@@ -560,8 +560,16 @@ function renderEngineSelect() {
 function renderBrowserModels() {
   const models = engine === "browser" ? (shownOptions?.models ?? []) : [];
   $("browserModels").hidden = models.length === 0;
+  const start = (id) => {
+    if (licenseAccepted) {
+      send({ type: "download", model: id });
+    } else {
+      pendingDownload = id;
+      renderBrowserModels();
+    }
+  };
   $("modelRows").replaceChildren(
-    ...models.map((m) => {
+    ...models.flatMap((m) => {
       const row = document.createElement("div");
       row.className = "model-row";
       const name = document.createElement("span");
@@ -572,31 +580,43 @@ function renderBrowserModels() {
       const button = document.createElement("button");
       button.className = "small";
       const download = downloads[m.id];
+      const failed = download?.state === "error";
+      if (failed) {
+        state.textContent = t("downloadFailed", download.message ?? "");
+        state.classList.add("error");
+      }
+      // A newer version than the file there, which stays in use until Update replaces it.
+      let note = null;
+      if (m.newer) {
+        note = document.createElement("div");
+        note.className = "model-note";
+        note.textContent = t("newerVersion", m.newer.date);
+        note.title = m.newer.change ?? "";
+      }
+      const buttons = [button];
       if (download?.state === "running" || m.downloading) {
         state.textContent = t("downloading", String(Math.floor((100 * (download?.received ?? 0)) / m.bytes)));
+        state.classList.remove("error");
         button.hidden = true;
       } else if (m.downloaded) {
         button.textContent = t("deleteModel");
         button.onclick = () => {
           if (confirm(t("deleteConfirm", m.label))) send({ type: "delete", model: m.id });
         };
-      } else {
-        if (download?.state === "error") {
-          state.textContent = t("downloadFailed", download.message ?? "");
-          state.classList.add("error");
+        if (m.newer) {
+          const update = document.createElement("button");
+          update.className = "small";
+          update.textContent = t("updateModel");
+          update.title = m.newer.change ?? "";
+          update.onclick = () => start(m.id);
+          buttons.unshift(update);
         }
+      } else {
         button.textContent = t("download");
-        button.onclick = () => {
-          if (licenseAccepted) {
-            send({ type: "download", model: m.id });
-          } else {
-            pendingDownload = m.id;
-            renderBrowserModels();
-          }
-        };
+        button.onclick = () => start(m.id);
       }
-      row.append(name, state, button);
-      return row;
+      row.append(name, state, ...buttons);
+      return note ? [row, note] : [row];
     }),
   );
   $("license").hidden = !pendingDownload;

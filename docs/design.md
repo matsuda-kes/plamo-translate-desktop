@@ -655,6 +655,15 @@ or, from v0.4.0, on its own with an in-browser engine (see "In-browser engine" b
     and the CSP allows `'wasm-unsafe-eval'`.
   - Models: the 0.8B and 2B Q4_K_M files of the app's catalog (WebAssembly's memory is limited to 4 GB), downloaded from Hugging Face
     into OPFS (resumed with a Range request, checked by size) after the panel's PLaMo Community License notice.
+    - Versions as in the app (§7): the built-in list has the files of the release, with the date and title of the commit that last changed
+      each. At most once a day, when the engine document starts, it lists both repositories (`tree/main?expand=true`) and keeps what it
+      finds in `localStorage` (`catalog`); a newer file replaces the built-in entry. The check never holds up a translation, and a failure
+      (offline) changes and shows nothing: the downloaded models work as before, and the next start tries again (15 s timeout).
+    - A file of another version is used as it is. The panel shows "A newer version is out (date)" under its row (the commit title as
+      the tooltip) and Update, which downloads the newer file beside it and then replaces it, after any load in progress (a loaded model
+      is in memory and stays in use).
+    - The start of the engine document also removes the partial downloads of other versions and the `.crswap` files a write leaves when
+      its document closes, which OPFS never reuses (one of 592 MB was found).
   - Prompts and long texts (`translator.js`, tested by `tests/extension/translator.test.mjs`): a port of `pfml`'s prompt format and of
     the chunks with history, with token counts estimated from characters, smaller chunks (512) and history (768 tokens) because
     WebAssembly reads prompts several times slower, and history that drops pairs several at a time so that consecutive prompts share

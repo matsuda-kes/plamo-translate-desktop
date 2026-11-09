@@ -152,6 +152,8 @@ the engine starts (after **Release**, or 5 minutes without use).
   the app's packages can also be loaded without the app, but only the extension's own package tells when a new version is out
   (the app's copy leaves that to the app): without the app, use that one.
 - In the browser, choose and download a model under **Settings**: 0.8B or 2B (Q4_K_M; the larger ones do not fit in WebAssembly's memory).
+  When PFN publishes a new version of a model you have, it stays usable, and **Settings** says so with the date; **Update** downloads it.
+  The extension asks Hugging Face at most once a day; offline, it does nothing and the downloaded models work as before.
   The first download asks you to accept the PLaMo Community License. Models are stored in the browser, separately from the app's:
   in the extension's own storage in the browser profile, not as files the app could share. With the app installed,
   the extension translates with the app's model, and the one in the browser can be deleted under **Settings**.

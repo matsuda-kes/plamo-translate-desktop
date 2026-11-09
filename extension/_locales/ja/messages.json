@@ -443,6 +443,17 @@
   "deleteModel": {
     "message": "削除"
   },
+  "updateModel": {
+    "message": "更新"
+  },
+  "newerVersion": {
+    "message": "新しい版があります（$DATE$）",
+    "placeholders": {
+      "date": {
+        "content": "$1"
+      }
+    }
+  },
   "downloadFailed": {
     "message": "ダウンロードに失敗しました: $ERROR$",
     "placeholders": {
