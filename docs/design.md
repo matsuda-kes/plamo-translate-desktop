@@ -1,6 +1,6 @@
 # PLaMo Translate Desktop — Design
 
-Status: describes the code after v0.4.0 (released 2026-11-07), towards v0.5.0. Update it together with the code.
+Status: describes the code of v0.5.0 (released 2026-11-10). Update it together with the code.
 
 ## 1. Goal
 
@@ -715,6 +715,8 @@ translation options and long texts (M4), and distribution (M5: Release workflow,
 Then v0.2.0 (2026-11-06): the browser extension (§12); v0.2.1: clearer failures of page translation from the panel.
 v0.3.0: Intel NPUs through OpenVINO, and automatic device selection that measures the devices (§8).
 v0.4.0 (2026-11-07): the extension's in-browser engine (§12), the macOS package (Apple Silicon), and the extension alone as a package.
+v0.5.0 (2026-11-10): updates of the app, which the extension follows (§11), new versions of the models (§7), the models folder,
+and the UI size (§9).
 
 Possible later work:
 
