@@ -21,7 +21,7 @@ use appdata::settings::{self, DeviceSetting, Settings};
 use appdata::{app_log, applog, devices, glossary};
 use engine::StopReason;
 use engine::llama::{Device, DeviceKind, Runtime, RuntimeOptions};
-use engine::models::{self as catalog, LocalState, ModelStore};
+use engine::models::{self as catalog, ModelStore};
 use engine::pfml::{Form, LangCode, TranslationOptions};
 use engine::worker::{Event, JobId, LoadRequest, Worker};
 
@@ -262,7 +262,7 @@ impl Host {
         let store = ModelStore::new(settings::models_dir());
         let models = catalog::entries()
             .into_iter()
-            .filter(|entry| store.state(entry) == LocalState::Downloaded)
+            .filter(|entry| store.state(entry).is_usable())
             .map(|entry| ModelChoice {
                 id: entry.id().to_owned(),
                 label: entry.to_string(),
@@ -484,7 +484,7 @@ impl Host {
             .model_choice
             .as_deref()
             .and_then(catalog::find_entry)
-            .filter(|entry| store.state(entry) == LocalState::Downloaded);
+            .filter(|entry| store.state(entry).is_usable());
         let entry = chosen.or_else(|| catalog::find_entry(settings.model.as_deref()?))?;
         Some((store.path(entry), entry.to_string()))
     }

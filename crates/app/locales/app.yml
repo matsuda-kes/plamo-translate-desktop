@@ -196,6 +196,12 @@ models.in_use:
 models.paused:
   en: "Paused at %{percent}%"
   ja: "%{percent}% で中断"
+models.newer:
+  en: A newer version is out
+  ja: 新しい版があります
+models.newer_dated:
+  en: "A newer version is out (%{date})"
+  ja: "新しい版があります（%{date}）"
 models.failed:
   en: "Failed: %{message}"
   ja: "失敗: %{message}"
@@ -205,6 +211,9 @@ models.download:
 models.resume:
   en: Resume
   ja: 再開
+models.update:
+  en: Update
+  ja: 更新
 models.retry:
   en: Retry
   ja: 再試行

@@ -1,7 +1,8 @@
 //! Resumable, verified model downloads.
 //!
 //! A download writes to `<file>.part`, resumes from its length with an HTTP `Range` request,
-//! verifies the SHA-256 of the whole file, and only then renames it to its final name.
+//! verifies the SHA-256 of the whole file, and only then renames it to its final name. A file of
+//! an older revision with that name is left for the caller to replace, since it may be in use.
 
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
@@ -79,7 +80,18 @@ impl From<ureq::Error> for DownloadError {
     }
 }
 
-/// Downloads `entry` into `store`, blocking the current thread. Returns the final path.
+/// What a finished download left.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Downloaded {
+    /// The file, at its final path.
+    Placed(PathBuf),
+    /// The verified file, still at its partial path: a file of an older revision has the final
+    /// name, and may be in use (Windows cannot replace a loaded model).
+    /// [`ModelStore::replace_with_download`] puts the new one in its place.
+    BesideOlder,
+}
+
+/// Downloads `entry` into `store`, blocking the current thread.
 ///
 /// `is_cancelled` is polled between reads. A cancelled or interrupted download keeps its
 /// partial file so the next call resumes it.
@@ -88,7 +100,7 @@ pub fn download(
     store: &ModelStore,
     on_progress: &mut dyn FnMut(Progress),
     is_cancelled: &dyn Fn() -> bool,
-) -> Result<PathBuf, DownloadError> {
+) -> Result<Downloaded, DownloadError> {
     std::fs::create_dir_all(store.dir())?;
     store.remove_stale_partials(entry);
     let part_path = store.partial_path(entry);
@@ -194,8 +206,11 @@ pub fn download(
         });
     }
     let path = store.path(entry);
+    if path.exists() {
+        return Ok(Downloaded::BesideOlder);
+    }
     std::fs::rename(&part_path, &path)?;
-    Ok(path)
+    Ok(Downloaded::Placed(path))
 }
 
 fn hash_prefix(
@@ -285,6 +300,11 @@ pub enum DownloadEvent {
         entry: &'static CatalogEntry,
         path: PathBuf,
     },
+    /// Downloaded and verified beside a file of an older revision, which may be in use:
+    /// [`ModelStore::replace_with_download`] puts it in place.
+    Verified {
+        entry: &'static CatalogEntry,
+    },
     Cancelled {
         entry: &'static CatalogEntry,
     },
@@ -344,7 +364,8 @@ impl Downloads {
                 );
                 active.lock().unwrap().remove(entry.id());
                 events(match result {
-                    Ok(path) => DownloadEvent::Finished { entry, path },
+                    Ok(Downloaded::Placed(path)) => DownloadEvent::Finished { entry, path },
+                    Ok(Downloaded::BesideOlder) => DownloadEvent::Verified { entry },
                     Err(DownloadError::Cancelled) => DownloadEvent::Cancelled { entry },
                     Err(e) => DownloadEvent::Failed {
                         entry,

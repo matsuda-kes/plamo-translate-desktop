@@ -10,14 +10,17 @@ All notable changes to PLaMo Translate Desktop. Each release's section here also
   - Version 0.4.0 and earlier cannot update themselves: install this version by hand as before (replace the app's files with the new package's). From this version on, the app updates itself.
 - The browser extension follows: when the app has updated its copy of the extension, the panel offers **Reload** to load the new version. The extension's own package says in the panel when a new version is out (at most once a day; **Check for new versions** in its settings turns this off).
 - A keyboard shortcut in the browser extension translates the page, as **Translate this page with PLaMo** in the right-click menu does. It has no key at first: set one at `chrome://extensions/shortcuts`.
+- When PFN publishes a new version of a downloaded model, its row in the Models dialog says so, with the date, and **Update** downloads it (the button's tooltip says what changed). The model stays usable meanwhile; the one in use is loaded again once the new file is in place.
 - A keyboard shortcut in the browser extension opens the side panel and translates the selected text there, as **Translate with PLaMo** in the right-click menu does; with nothing selected, it puts the cursor in the panel's text box. It has no key at first: set one at `chrome://extensions/shortcuts`.
 
 ### Changed
 
+- The built-in model list points to the files of 2026-11-08.
 - Closing the box of a page translation (×) ends the translation of the page. It came back with the next translated paragraph. What is translated stays, and translating the page again goes on with the rest.
 
 ### Fixed
 
+- A downloaded model no longer disappears from the Models dialog when PFN publishes a new version of its file, and is loaded at start as before ([#6](https://github.com/tanakh/plamo-translate-desktop/issues/6)). PFN replaced every file four times by 2026-11-08, changing only the chat template, which the app does not use; a file counted only at the newest version's size. Now a downloaded file is used whatever its version.
 - **Translate with PLaMo** in the browser extension shows the translation in the side panel of the window it was chosen in. A side panel open in another window could take it.
 - A translation asked for from the right-click menu or the selection shortcut whose side panel did not open is dropped after 30 seconds. Opening the panel in that window later translated the old text.
 - The extension's README and its notice under **Translate this page** said that the toolbar button lets the panel into a tab. It does not: the browser grants nothing when the button opens the side panel. They now name the right-click menu and the shortcuts only.

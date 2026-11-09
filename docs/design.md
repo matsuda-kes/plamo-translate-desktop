@@ -245,14 +245,23 @@ The implementation is `engine::llama::Session` (one llama.cpp context of a loade
 
 - The catalog (`engine::models`) starts with a built-in list (`BUILTIN`) of the 14 GGUF files published at build time.
   Each entry has its repo, pinned commit, file name, size, and SHA-256, and the download URL uses the pinned commit.
+  - Hugging Face has no version numbers, so an entry's version is the commit that last changed the file: its date (`published`)
+    and title (`change`).
 - Catalog discovery (`engine::discovery`) keeps the app current without a new release:
   - At start-up it searches Hugging Face for `pfnet/<family>-<size>-GGUF` repositories of supported families (today `plamo-3-translate`).
   - It pins each repository to its current commit and reads each `<family>-<size>-<quant>.gguf` with its size and SHA-256 from the Git LFS metadata.
-  - New sizes or quantizations are added, and newer revisions of known files replace the old ones.
-  - On 2026-11-06 PFN replaced every file with one that differs only in its chat template (which the app does not use), and the first
-    revision's files are no longer served. The built-in list has the new revisions; `SUPERSEDED` lists the first revision's files,
-    so that one already downloaded still counts (by its size) and an entry for it from an older cached catalog is ignored.
+    The tree is listed with `expand=true`, which adds the commit that last changed each file.
+  - New sizes or quantizations are added, and newer revisions of known files replace the old ones. An entry only replaces one with an
+    earlier date. Entries cached by versions before 0.5.0 have no date and may be older than the built-in list, so they never replace a dated one.
   - The result is cached in `catalog.json` next to the models, so offline starts know it. "Check again" in the dialog repeats the search.
+- PFN replaces the files now and then: four times between 2026-11-04 and 2026-11-08, each time changing only the chat template,
+  which the app does not use (it writes its own prompts).
+  - A downloaded file is used whatever its revision (`LocalState::Outdated` when its size is not the newest one's), so a new revision
+    never makes a model look missing. Its row says a newer version is out, with the date, and Update downloads it; the Update button's
+    tooltip has the commit title, which says what changed.
+  - The newer file downloads beside the older one, which stays usable meanwhile. When it is verified, the older file is replaced:
+    for the active model, after the worker has released it (Windows cannot replace a loaded file), and the model is then loaded again.
+    If the browser host still holds the file on Windows, the row shows the error and Update retries (the finished part is only hashed again).
   - A new model generation with a different prompt format still needs an app update, so unknown families are ignored.
 - Quality data (`engine::models::QUALITY`) holds the scores PFN publishes for every file and for the BF16 reference:
   PFTB, SaaS, WMT24++ COMET-22, and FLORES+ chrF++ (Ja↔ and En↔14 languages).
@@ -267,7 +276,8 @@ The implementation is `engine::llama::Session` (one llama.cpp context of a loade
   with a 30 s read timeout so a stalled connection cannot block cancellation.
   - Hugging Face redirects to a CDN that honours `Range`, so an interrupted or cancelled download resumes from the partial file.
   - The existing part is hashed first, so the digest always covers the whole file.
-  - The file is renamed into place only after the SHA-256 matches, so a final file of the right size counts as downloaded.
+  - The file is renamed into place only after the SHA-256 matches, so a final file counts as downloaded. A file of an older revision with
+    that name is left for the app to replace (`Downloaded::BesideOlder`, then `ModelStore::replace_with_download`).
   - Progress reports bytes and two rates, throttled to 10 Hz.
     The recent rate (exponentially smoothed) is what the UI shows.
     The average since the transfer started is used for the ETA once 3 s have passed, so the estimate does not jump around.
@@ -281,6 +291,7 @@ The implementation is `engine::llama::Session` (one llama.cpp context of a loade
   - Downloading: a progress bar and Cancel.
   - Paused: Resume and Delete.
   - Downloaded: Use (Unload for the active model) and Delete.
+  - Downloaded, a newer version out: the date of the newer one, and Update besides Use and Delete.
   - Deleting asks for confirmation.
   - Deleting the active model unloads it first. The file is removed after the worker reports `Unloaded`, because Windows cannot delete a memory-mapped file.
   - Downloads stay disabled until the user accepts the PLaMo Community License. The acceptance is saved in settings.

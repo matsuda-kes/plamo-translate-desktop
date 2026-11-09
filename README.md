@@ -18,6 +18,7 @@ locally on your computer. It works offline once a model is downloaded. Written i
   - Each file shows the translation quality PFN publishes, with the difference from the unquantized model.
   - Downloads resume after an interruption and are verified with SHA-256.
   - Newly published files are picked up from Hugging Face without an app update.
+    When PFN publishes a new version of a file you have, it stays usable, and its row says so with the date; **Update** downloads it.
 - Runs on the CPU (AVX2 or AVX-512) or on a GPU through Vulkan. Linux source builds can also use ROCm. The device is selectable; Automatic uses the fastest one measured on this PC, or else the discrete GPU.
 - English and Japanese UI. It follows the OS language by default and can be changed under Settings (the gear in the status bar). `PLAMO_LANG=ja` or `en` overrides both.
 - Light and dark themes. The default follows the OS; Settings can fix either one.

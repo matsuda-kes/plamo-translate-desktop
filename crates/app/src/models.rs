@@ -37,6 +37,9 @@ pub enum ModelsEvent {
     Unload,
     /// Delete the active model. The owner unloads it first, then calls [`ModelsPanel::delete`].
     DeleteActive(&'static CatalogEntry),
+    /// The newest revision of the active model is downloaded beside the file in use. The owner
+    /// unloads the model, calls [`ModelsPanel::replace`], then loads it again.
+    ReplaceActive(&'static CatalogEntry),
     /// Show the license agreement (downloads stay disabled until it is accepted).
     ReviewLicense,
     /// Entries were added or updated from Hugging Face.
@@ -198,6 +201,16 @@ impl ModelsPanel {
                     cx.emit(ModelsEvent::Use(entry));
                 }
             }
+            DownloadEvent::Verified { entry } => {
+                crate::app_log!("downloaded beside an older revision: {}", entry.id());
+                self.progress.remove(entry.id());
+                if self.active == Some(entry.id()) {
+                    cx.emit(ModelsEvent::ReplaceActive(entry));
+                } else if self.replace(entry, cx) && self.use_when_done && self.active.is_none() {
+                    self.use_when_done = false;
+                    cx.emit(ModelsEvent::Use(entry));
+                }
+            }
             DownloadEvent::Cancelled { entry } => {
                 crate::app_log!("download cancelled: {}", entry.id());
                 self.progress.remove(entry.id());
@@ -223,10 +236,7 @@ impl ModelsPanel {
             entry.id(),
             self.store().state(entry)
         );
-        let downloaded = match self.store().state(entry) {
-            LocalState::Partial(n) => n,
-            _ => 0,
-        };
+        let downloaded = self.store().state(entry).partial().unwrap_or(0);
         self.progress.insert(
             entry.id(),
             Progress {
@@ -312,6 +322,26 @@ impl ModelsPanel {
         deleted
     }
 
+    /// Puts the newest revision of `entry`, downloaded beside the older file, in its place. The
+    /// model must not be loaded. Returns whether it is in place; a failure shows in the row (the
+    /// browser host may still hold the file on Windows), and updating again retries.
+    pub fn replace(&mut self, entry: &'static CatalogEntry, cx: &mut Context<Self>) -> bool {
+        let replaced = match self.store().replace_with_download(entry) {
+            Ok(path) => {
+                crate::app_log!("replaced an older revision: {}", path.display());
+                self.errors.remove(entry.id());
+                true
+            }
+            Err(e) => {
+                crate::app_log!("replacing {} failed: {e}", entry.id());
+                self.errors.insert(entry.id(), e.to_string());
+                false
+            }
+        };
+        cx.notify();
+        replaced
+    }
+
     fn render_row(&self, entry: &'static CatalogEntry, cx: &mut Context<Self>) -> AnyElement {
         let (danger, warning, secondary, muted) = {
             let theme = cx.theme();
@@ -345,23 +375,44 @@ impl ModelsPanel {
                 .child(t!("models.failed", message = error).into_owned())
                 .into_any_element()
         } else {
+            let present = || {
+                if is_active {
+                    Tag::primary()
+                        .small()
+                        .child(t!("models.in_use").into_owned())
+                        .into_any_element()
+                } else {
+                    div()
+                        .child(t!("models.downloaded").into_owned())
+                        .into_any_element()
+                }
+            };
+            let paused = |n: u64| {
+                t!(
+                    "models.paused",
+                    percent = format!("{:.0}", n as f64 / entry.bytes as f64 * 100.0)
+                )
+                .into_owned()
+            };
             match state {
-                LocalState::Downloaded if is_active => Tag::primary()
-                    .small()
-                    .child(t!("models.in_use").into_owned())
-                    .into_any_element(),
-                LocalState::Downloaded => div()
-                    .child(t!("models.downloaded").into_owned())
-                    .into_any_element(),
-                LocalState::Partial(n) => div()
-                    .child(
-                        t!(
-                            "models.paused",
-                            percent = format!("{:.0}", n as f64 / entry.bytes as f64 * 100.0)
-                        )
-                        .into_owned(),
-                    )
-                    .into_any_element(),
+                LocalState::Downloaded => present(),
+                LocalState::Outdated { partial } => {
+                    let mut newer = match entry.published_date() {
+                        Some(date) => t!("models.newer_dated", date = date),
+                        None => t!("models.newer"),
+                    }
+                    .into_owned();
+                    if let Some(n) = partial {
+                        newer = format!("{newer} · {}", paused(n));
+                    }
+                    v_flex()
+                        .gap_0p5()
+                        .items_start()
+                        .child(present())
+                        .child(div().text_xs().text_color(muted).child(newer))
+                        .into_any_element()
+                }
+                LocalState::Partial(n) => div().child(paused(n)).into_any_element(),
                 LocalState::Missing => div().into_any_element(),
             }
         };
@@ -369,7 +420,7 @@ impl ModelsPanel {
         let button = |name: &str| Button::new(SharedString::from(format!("{name}-{id}"))).xsmall();
         // A fixed-width column keeps Delete in the same place whichever action precedes it.
         let actions = h_flex()
-            .w(px(190.))
+            .w(px(210.))
             .flex_shrink_0()
             .gap_1()
             .justify_end()
@@ -382,7 +433,30 @@ impl ModelsPanel {
                     )
                 } else {
                     match state {
-                        LocalState::Downloaded => this
+                        LocalState::Downloaded | LocalState::Outdated { .. } => this
+                            .when(matches!(state, LocalState::Outdated { .. }), |this| {
+                                this.child(
+                                    button("update")
+                                        .label(
+                                            if error.is_some() {
+                                                t!("models.retry")
+                                            } else {
+                                                t!("models.update")
+                                            }
+                                            .into_owned(),
+                                        )
+                                        // What the newer version changed.
+                                        .when_some(entry.change, |this, change| {
+                                            this.tooltip(change)
+                                        })
+                                        .disabled(!can_download)
+                                        .on_click(
+                                            cx.listener(move |this, _, _, cx| {
+                                                this.start(entry, cx)
+                                            }),
+                                        ),
+                                )
+                            })
                             .map(|this| {
                                 if is_active {
                                     this.child(

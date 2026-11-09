@@ -2,7 +2,8 @@
 //!
 //! The catalog starts with the files known when this version was built ([`BUILTIN`]). Entries
 //! found on Hugging Face at run time (see [`crate::discovery`]) are added with [`register`]; they
-//! may add new sizes or quantizations, or supersede a built-in file with a newer revision.
+//! may add new sizes or quantizations, or supersede a built-in file with a newer revision. A
+//! downloaded file of an older revision stays usable (see [`ModelStore::state`]).
 
 use std::fmt;
 use std::io;
@@ -29,6 +30,11 @@ pub struct CatalogEntry {
     pub bytes: u64,
     /// Lowercase hex SHA-256 of the file.
     pub sha256: &'static str,
+    /// When the commit that last changed the file was made (ISO 8601, UTC), if known. Hugging
+    /// Face has no version numbers: this is the file's version.
+    pub published: Option<&'static str>,
+    /// That commit's title, which says what changed.
+    pub change: Option<&'static str>,
 }
 
 impl CatalogEntry {
@@ -57,6 +63,11 @@ impl CatalogEntry {
             .trim_end_matches(['b', 'B'])
             .parse()
             .unwrap_or(0.0)
+    }
+
+    /// The day the file was published (`2026-11-08`), if known.
+    pub fn published_date(&self) -> Option<&'static str> {
+        self.published.and_then(|p| p.get(..10))
     }
 
     /// Size for display, e.g. `2B`.
@@ -140,7 +151,7 @@ pub const QUALITY: &[(&str, Quality)] = &[
 ];
 
 macro_rules! entry {
-    ($slug:literal, $q:literal, $rev:literal, $bytes:literal, $sha:literal) => {
+    ($slug:literal, $q:literal, $rev:literal, $bytes:literal, $sha:literal, $date:literal) => {
         CatalogEntry {
             family: "plamo-3-translate",
             size: $slug,
@@ -150,69 +161,48 @@ macro_rules! entry {
             file_name: concat!("plamo-3-translate-", $slug, "-", $q, ".gguf"),
             bytes: $bytes,
             sha256: $sha,
+            published: Some($date),
+            change: Some(TARGET_LANG_AUTO),
         }
     };
 }
 
-/// The GGUF files published when this version was built (the revisions of 2026-11-06).
+/// What the commit of the files of [`BUILTIN`] changed. PFN has replaced every file four times
+/// since the first release, each time changing only the chat template, which this app does not
+/// use (it writes its own prompts).
+const TARGET_LANG_AUTO: &str =
+    "Update the chat template: switch between Japanese and English by default (target_lang=auto)";
+
+/// The GGUF files published when this version was built (the revisions of 2026-11-08).
 #[rustfmt::skip]
 pub const BUILTIN: &[CatalogEntry] = &[
-    entry!("0.8b", "Q4_K_M", "dbeb0856cb0b004b484f190bb71dd65876297013", 573123200, "923b2f28a9856de1b8b3b610a7e59ded0b14d007466fd5dd526e6a9ecaadafdd"),
-    entry!("0.8b", "Q4_0",   "dbeb0856cb0b004b484f190bb71dd65876297013", 547539584, "39300577d714b108a509ca9d582ea7335ae2fa4504ee73d3358c00b4980fb32a"),
-    entry!("0.8b", "Q3_K_M", "dbeb0856cb0b004b484f190bb71dd65876297013", 486382208, "712dbe94cdb6dffa08082472e74ee8c65e12e688ad9e76cb944a1b3699be208f"),
-    entry!("0.8b", "Q2_K",   "dbeb0856cb0b004b484f190bb71dd65876297013", 410135168, "8f84478629c5d36ffe6a28f4de1bbe7f49da0faf53644614453d00ad63330bea"),
-    entry!("2b",   "Q4_K_M", "232fbd7916519edecddfdae0beae7e76fe70453f", 1807199392, "f36d0813dd95573a852ab5d76e374c543632d9e292929e922bcdbf7e53b494e0"),
-    entry!("2b",   "Q4_0",   "232fbd7916519edecddfdae0beae7e76fe70453f", 1698573472, "9b976e7857b65012cb98da4f4176203fb42fadf542057980d5329a93d3e4f8f8"),
-    entry!("2b",   "Q3_K_M", "232fbd7916519edecddfdae0beae7e76fe70453f", 1495882912, "24ef0a97f1527d2aa49fc12ddcd9eb6de74d6b883ffcd84c72cac299fafb3006"),
-    entry!("2b",   "Q2_K",   "232fbd7916519edecddfdae0beae7e76fe70453f", 1225608352, "01517813751c20412568f93845858f6902eefc3794f247dfbb50bad466b108e7"),
-    entry!("8b",   "Q4_K_M", "2234f168757f570714b333049c9d018161ec5277", 5280442080, "47a04e86a67bcc352fa186f01159060aae594b73993e1d49dbfc0ef0081d01ad"),
-    entry!("8b",   "Q3_K_M", "2234f168757f570714b333049c9d018161ec5277", 4310214368, "b52b510f7bf1d49bff10cc9024518bfd88b78f0bb38d63956f5e7784f573d97b"),
-    entry!("8b",   "Q2_K",   "2234f168757f570714b333049c9d018161ec5277", 3450742496, "917b86aedab74a3d2172bbed89830a9593bc610b370886a2b5f5acd3e1f58589"),
-    entry!("31b",  "Q4_K_M", "7970aee3005211df5d90740a3e009a9b26be4df9", 19526590304, "ae935e91092f67df6254388c510cb89870353055912e452bb9e4923fd4f41071"),
-    entry!("31b",  "Q3_K_M", "7970aee3005211df5d90740a3e009a9b26be4df9", 15863127904, "52918573c603e656f29d221f11ced1709a94df134d58dffa603806f77f947942"),
-    entry!("31b",  "Q2_K",   "7970aee3005211df5d90740a3e009a9b26be4df9", 12609920864, "37d16404bc852dc8bf8ca95d6411e90b3bc0ff754b3c68474736ea59be3959ab"),
+    entry!("0.8b", "Q4_K_M", "e10c327b7a7ce84ffc427cb4b09360b781429fda",   573126848, "70891ec70dc7ab4205745a38307867c2881b99239f20327927633abfe4bc9ec6", "2026-11-08T05:48:24Z"),
+    entry!("0.8b", "Q4_0",   "e10c327b7a7ce84ffc427cb4b09360b781429fda",   547543232, "33deed2822f799de4d15bb03bea1ac40efa7d663d9239ee54cc7f65f5ab92917", "2026-11-08T05:48:24Z"),
+    entry!("0.8b", "Q3_K_M", "e10c327b7a7ce84ffc427cb4b09360b781429fda",   486385856, "6c64dd53a367966ec00a7335ff34bb77ad5a893b6fbc7bf9ae51f7241e0dbfbe", "2026-11-08T05:48:24Z"),
+    entry!("0.8b", "Q2_K",   "e10c327b7a7ce84ffc427cb4b09360b781429fda",   410138816, "97f0fd4a68d3d8eda39b018fd2f1ce2c58a6f86fad7dafd6d8b17cbdfab60709", "2026-11-08T05:48:24Z"),
+    entry!("2b",   "Q4_K_M", "228a27cc0bb4f111219963848d50a3127c16ca73",  1807203040, "1ffd9073afcc70e35ccc942428aa2b73d7aa2b9ea779bf504b775369e0276c13", "2026-11-08T05:48:42Z"),
+    entry!("2b",   "Q4_0",   "228a27cc0bb4f111219963848d50a3127c16ca73",  1698577120, "429b7934c88332262b4cca9fd5de36eb02e00f42dcd08ceb511a23e7ee4abafb", "2026-11-08T05:48:42Z"),
+    entry!("2b",   "Q3_K_M", "228a27cc0bb4f111219963848d50a3127c16ca73",  1495886560, "fd79d48441cbb6eed8377084b43077ed006c9575ca55e47c002a8ee2f7e9faff", "2026-11-08T05:48:42Z"),
+    entry!("2b",   "Q2_K",   "228a27cc0bb4f111219963848d50a3127c16ca73",  1225612000, "238232fe01810b5a0b42e93a4788bedb6b8831cc0baa4e1213ffb8394053b20d", "2026-11-08T05:48:42Z"),
+    entry!("8b",   "Q4_K_M", "fccc6b15efc7d615189fa5df6a1a02ecd2dbc18f",  5280445728, "94e5d3f91b421f7c8900ddaac27b11a19f7441426c954bbb25a2fd60a1640187", "2026-11-08T05:49:07Z"),
+    entry!("8b",   "Q3_K_M", "fccc6b15efc7d615189fa5df6a1a02ecd2dbc18f",  4310218016, "ddd9697162fe3c8e6ece064863ae694fb28430ee98c0addfbd241f56a7f45578", "2026-11-08T05:49:07Z"),
+    entry!("8b",   "Q2_K",   "fccc6b15efc7d615189fa5df6a1a02ecd2dbc18f",  3450746144, "3322a15c142d2a30e552fe1ba054fa84174996c4537ee9161c1a1c96657dc127", "2026-11-08T05:49:07Z"),
+    entry!("31b",  "Q4_K_M", "8aa0d99cd886de5c7efb1d9418ce56562f54946a", 19526593952, "47788c3eb71b830919a8454022381de943a43edfab65dad9e742997028d1f9df", "2026-11-08T05:50:19Z"),
+    entry!("31b",  "Q3_K_M", "8aa0d99cd886de5c7efb1d9418ce56562f54946a", 15863131552, "2b91a6dc48a3544f08150e4e979a67af6ea489ac06ead39d0a3343bad2a2e330", "2026-11-08T05:50:19Z"),
+    entry!("31b",  "Q2_K",   "8aa0d99cd886de5c7efb1d9418ce56562f54946a", 12609924512, "27b50ef2359e908aec72e0fc589535442eca8b17406c585d7f73db1d3e88cd65", "2026-11-08T05:50:19Z"),
 ];
-
-/// The files of the first revisions (2026-11-04), by id: (bytes, sha256). PFN replaced them on
-/// 2026-11-06 with files that differ only in their chat template, which this app does not use
-/// (it writes its own prompts), and they are no longer served. A file of that revision that was
-/// downloaded is used as it is; an entry for it (from a catalog cached by an earlier run) is
-/// outdated and ignored.
-#[rustfmt::skip]
-pub const SUPERSEDED: &[(&str, u64, &str)] = &[
-    ("plamo-3-translate-0.8b-Q4_K_M", 573116288, "3dbb09295bfd3350231ba0dba92bc72cb14111ef1b034e37dad39d581bd86b9c"),
-    ("plamo-3-translate-0.8b-Q4_0", 547532672, "2805c14de045d50f98e35e81aaf0fd23f6baa49aa8e06efcc11c46d44021bd05"),
-    ("plamo-3-translate-0.8b-Q3_K_M", 486375296, "c6e6a9d0b05f3c0a7a4b70c6460a68dcf169d417984024b761c50e42e5713cdb"),
-    ("plamo-3-translate-0.8b-Q2_K", 410128256, "30ae7b485e0f54980c4a5223d8415adbe04c382b36861687361b2b492929cc16"),
-    ("plamo-3-translate-2b-Q4_K_M", 1807192480, "2c288ecc7ebfe60c3561726580da3583767f3c41ca3ef5c6825bf6c4cc060787"),
-    ("plamo-3-translate-2b-Q4_0", 1698566560, "7a1839ed7f315b03176a7c7bb697629a95f8c3a61e669dfdf1cbeb6471551a66"),
-    ("plamo-3-translate-2b-Q3_K_M", 1495876000, "a940db3afd6749bc74e550e324cccf1beb639cbf2dfe449f9a7f143e696fbec5"),
-    ("plamo-3-translate-2b-Q2_K", 1225601440, "a2a02331f4922d2e283ac83c45cdbe2ab0faaf880e613078cde1299d7be78e2a"),
-    ("plamo-3-translate-8b-Q4_K_M", 5280435168, "6b429549113ce0a61281ac72be195697241f89266f4247efec4893e4f580cf10"),
-    ("plamo-3-translate-8b-Q3_K_M", 4310207456, "2413a3065f8666303d13b39161936786f2d8db9c4f1de4c2d2fcf80a72652fdc"),
-    ("plamo-3-translate-8b-Q2_K", 3450735584, "610bd828dfe6f372437eb35b9be61fefeaa1aaa7861bce8446009f09f1545d3c"),
-    ("plamo-3-translate-31b-Q4_K_M", 19526583392, "d1ed08149f888ef7a0da38e26bf394a13d0f079b592229c8778f5f1a91cf6457"),
-    ("plamo-3-translate-31b-Q3_K_M", 15863120992, "f7b5ff4ce1f893acf029a4b00360bb59898399162576c1d1bbcd587b13c9553a"),
-    ("plamo-3-translate-31b-Q2_K", 12609913952, "3565eb103a56cd7d8a3229f44a33b2bd601bcfa71018a4eed9f6648629ddaf03"),
-];
-
-/// Whether `bytes` is the size of the first revision of the file `id` (see [`SUPERSEDED`]).
-fn is_superseded_size(id: &str, bytes: u64) -> bool {
-    SUPERSEDED.iter().any(|&(i, b, _)| i == id && b == bytes)
-}
 
 /// Entries registered at run time. Each is leaked once, so `&'static` references stay valid.
 static REGISTERED: RwLock<Vec<&'static CatalogEntry>> = RwLock::new(Vec::new());
 
-/// Adds entries found at run time. An entry with the id of an existing one replaces it (a newer
-/// revision); identical entries are ignored. Returns how many entries were added or replaced.
+/// Adds entries found at run time. An entry with the id of an existing one replaces it if it is
+/// a newer revision; identical and older entries are ignored. Returns how many entries were
+/// added or replaced.
 pub fn register(entries: impl IntoIterator<Item = CatalogEntry>) -> usize {
     let mut registered = REGISTERED.write().unwrap_or_else(|e| e.into_inner());
     let mut changed = 0;
     for entry in entries {
-        if !SUPPORTED_FAMILIES.contains(&entry.family)
-            || SUPERSEDED.iter().any(|&(_, _, sha)| sha == entry.sha256)
-        {
+        if !SUPPORTED_FAMILIES.contains(&entry.family) {
             continue;
         }
         let current = registered
@@ -221,7 +211,7 @@ pub fn register(entries: impl IntoIterator<Item = CatalogEntry>) -> usize {
             .find(|e| e.id() == entry.id())
             .copied()
             .or_else(|| BUILTIN.iter().find(|e| e.id() == entry.id()));
-        if current.is_some_and(|c| c.sha256 == entry.sha256) {
+        if current.is_some_and(|c| c.sha256 == entry.sha256 || !is_newer(&entry, c)) {
             continue;
         }
         registered.retain(|e| e.id() != entry.id());
@@ -229,6 +219,17 @@ pub fn register(entries: impl IntoIterator<Item = CatalogEntry>) -> usize {
         changed += 1;
     }
     changed
+}
+
+/// Whether `entry` is a newer revision than `current`. An entry without a date (from a catalog
+/// cached by a version before dates were kept) may be older than the built-in one, so it never
+/// replaces a dated one.
+fn is_newer(entry: &CatalogEntry, current: &CatalogEntry) -> bool {
+    match (entry.published, current.published) {
+        (Some(new), Some(old)) => new > old,
+        (None, Some(_)) => false,
+        (_, None) => true,
+    }
 }
 
 /// All known entries, newest revision of each file, sorted by family, size and quantization.
@@ -296,11 +297,32 @@ pub fn recommend(available_bytes: u64) -> &'static CatalogEntry {
 /// Local state of a catalog entry.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LocalState {
-    /// The verified file is present.
+    /// The file of the newest known revision is present.
     Downloaded,
+    /// A file of another revision is present, and is used as it is. The newest revision can be
+    /// downloaded beside it, and `partial` bytes of it already are.
+    Outdated {
+        partial: Option<u64>,
+    },
     /// A partial download of this many bytes can be resumed.
     Partial(u64),
     Missing,
+}
+
+impl LocalState {
+    /// Whether there is a file to load.
+    pub fn is_usable(self) -> bool {
+        matches!(self, Self::Downloaded | Self::Outdated { .. })
+    }
+
+    /// How much of the newest revision is downloaded, if a download of it can be resumed.
+    pub fn partial(self) -> Option<u64> {
+        match self {
+            Self::Partial(n) => Some(n),
+            Self::Outdated { partial } => partial,
+            Self::Downloaded | Self::Missing => None,
+        }
+    }
 }
 
 /// Directory holding downloaded models.
@@ -331,22 +353,24 @@ impl ModelStore {
         self.dir.join(format!("{}.{digest}.part", entry.file_name))
     }
 
-    /// Files only reach their final name after verification, so a final file of the right
-    /// size counts as downloaded.
+    /// Downloads only reach their final name after verification, so a final file is taken as
+    /// complete; one of the newest revision's size counts as that revision. A file of another
+    /// size is another revision (downloaded earlier, or copied in by hand), used as it is: the
+    /// revisions so far differ only in their chat template, which this app does not use.
     pub fn state(&self, entry: &CatalogEntry) -> LocalState {
-        if std::fs::metadata(self.path(entry))
-            .is_ok_and(|m| m.len() == entry.bytes || is_superseded_size(entry.id(), m.len()))
-        {
-            return LocalState::Downloaded;
-        }
-        match std::fs::metadata(self.partial_path(entry)) {
-            Ok(m) if m.len() > 0 => LocalState::Partial(m.len()),
-            _ => LocalState::Missing,
+        let partial = std::fs::metadata(self.partial_path(entry))
+            .ok()
+            .map(|m| m.len())
+            .filter(|&n| n > 0);
+        match std::fs::metadata(self.path(entry)) {
+            Ok(m) if m.is_file() && m.len() == entry.bytes => LocalState::Downloaded,
+            Ok(m) if m.is_file() && m.len() > 0 => LocalState::Outdated { partial },
+            _ => partial.map_or(LocalState::Missing, LocalState::Partial),
         }
     }
 
     /// Partial downloads of `entry`'s file for other revisions (another digest in the name):
-    /// they can never be resumed, and the files of older revisions are no longer served.
+    /// they are never resumed, since only the newest revision is downloaded.
     pub fn stale_partials(&self, entry: &CatalogEntry) -> Vec<PathBuf> {
         let current = self.partial_path(entry);
         let prefix = format!("{}.", entry.file_name);
@@ -377,6 +401,15 @@ impl ModelStore {
                 std::fs::remove_file(&path).ok().map(|()| len)
             })
             .sum()
+    }
+
+    /// Puts the newest revision of `entry`, downloaded and verified beside an older one (see
+    /// [`crate::download::Downloaded::BesideOlder`]), in place of the older one. Fails while the
+    /// older file is in use on Windows.
+    pub fn replace_with_download(&self, entry: &CatalogEntry) -> io::Result<PathBuf> {
+        let path = self.path(entry);
+        std::fs::rename(self.partial_path(entry), &path)?;
+        Ok(path)
     }
 
     /// Deletes the model and any partial download, of this revision or an older one.
@@ -410,6 +443,7 @@ mod tests {
             assert_eq!(e.sha256.len(), 64);
             assert!(e.sha256.bytes().all(|b| b.is_ascii_hexdigit()));
             assert_eq!(e.revision.len(), 40);
+            assert!(e.published_date().is_some() && e.change.is_some());
             assert!(e.quality().is_some(), "{} has no quality data", e.id());
             assert!(e.reference_quality().is_some());
         }
@@ -423,7 +457,7 @@ mod tests {
         assert_eq!(
             e.url(),
             "https://huggingface.co/pfnet/plamo-3-translate-2b-GGUF/resolve/\
-             232fbd7916519edecddfdae0beae7e76fe70453f/plamo-3-translate-2b-Q4_K_M.gguf"
+             228a27cc0bb4f111219963848d50a3127c16ca73/plamo-3-translate-2b-Q4_K_M.gguf"
         );
     }
 
@@ -456,6 +490,7 @@ mod tests {
         let newer = CatalogEntry {
             revision: "ffffffffffffffffffffffffffffffffffffffff",
             sha256: "bb",
+            published: Some("2099-01-01T00:00:00Z"),
             ..base
         };
         // An unsupported family is ignored.
@@ -499,9 +534,24 @@ mod tests {
         assert_eq!(store.state(e), LocalState::Missing);
         std::fs::write(store.partial_path(e), b"abc").unwrap();
         assert_eq!(store.state(e), LocalState::Partial(3));
-        // A final file of the wrong size does not count.
-        std::fs::write(store.path(e), b"short").unwrap();
-        assert_eq!(store.state(e), LocalState::Partial(3));
+        assert!(!store.state(e).is_usable());
+        // A final file of another size is another revision: usable, and the newest one's
+        // partial download can be resumed beside it.
+        std::fs::write(store.path(e), b"older").unwrap();
+        assert_eq!(store.state(e), LocalState::Outdated { partial: Some(3) });
+        assert!(store.state(e).is_usable());
+        assert_eq!(store.state(e).partial(), Some(3));
+        std::fs::remove_file(store.partial_path(e)).unwrap();
+        assert_eq!(store.state(e), LocalState::Outdated { partial: None });
+        // The newest revision's size (a sparse file).
+        std::fs::File::create(store.path(e))
+            .unwrap()
+            .set_len(e.bytes)
+            .unwrap();
+        assert_eq!(store.state(e), LocalState::Downloaded);
+        // An empty file is nothing.
+        std::fs::write(store.path(e), b"").unwrap();
+        assert_eq!(store.state(e), LocalState::Missing);
         store.delete(e).unwrap();
         assert_eq!(store.state(e), LocalState::Missing);
         std::fs::remove_dir_all(&dir).unwrap();
@@ -535,43 +585,23 @@ mod tests {
     }
 
     #[test]
-    fn first_revision_files_still_count() {
-        // A catalog cached before 2026-11-06 lists the first revision: ignored.
+    fn older_revisions_are_ignored() {
         let current = *find_entry("plamo-3-translate-31b-Q2_K").unwrap();
-        let &(_, bytes, sha256) = SUPERSEDED.iter().find(|s| s.0 == current.id()).unwrap();
-        let first = CatalogEntry {
-            revision: "d0df961b923db3ff9fc325f4410d6f09005afcd6",
-            bytes,
-            sha256,
+        // The revision before the built-in one.
+        let older = CatalogEntry {
+            revision: "7970aee3005211df5d90740a3e009a9b26be4df9",
+            bytes: 12609920864,
+            sha256: "37d16404bc852dc8bf8ca95d6411e90b3bc0ff754b3c68474736ea59be3959ab",
+            published: Some("2026-11-06T00:50:07Z"),
             ..current
         };
-        assert_eq!(register([first]), 0);
+        // From a catalog cached before dates were kept: it may be older.
+        let undated = CatalogEntry {
+            published: None,
+            change: None,
+            ..older
+        };
+        assert_eq!(register([older, undated]), 0);
         assert_eq!(find_entry(current.id()).unwrap().sha256, current.sha256);
-
-        // A downloaded file of the first revision is used as it is (a sparse file of its size).
-        let dir = std::env::temp_dir().join(format!("plamo-first-revision-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let store = ModelStore::new(&dir);
-        let e = find_entry("plamo-3-translate-0.8b-Q2_K").unwrap();
-        let &(_, first_bytes, _) = SUPERSEDED.iter().find(|s| s.0 == e.id()).unwrap();
-        assert_ne!(first_bytes, e.bytes);
-        let file = std::fs::File::create(store.path(e)).unwrap();
-        file.set_len(first_bytes).unwrap();
-        assert_eq!(store.state(e), LocalState::Downloaded);
-        file.set_len(first_bytes - 1).unwrap();
-        assert_eq!(store.state(e), LocalState::Missing);
-        drop(file);
-        std::fs::remove_dir_all(&dir).unwrap();
-    }
-
-    #[test]
-    fn every_entry_has_a_first_revision() {
-        for e in BUILTIN {
-            assert!(
-                SUPERSEDED.iter().any(|s| s.0 == e.id() && s.2 != e.sha256),
-                "{}",
-                e.id()
-            );
-        }
     }
 }

@@ -13,7 +13,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use anyhow::{Context, bail};
-use engine::download::{DownloadError, download};
+use engine::download::{DownloadError, Downloaded, download};
 use engine::models::{ModelStore, default_entry, entries, find_entry};
 
 fn main() -> anyhow::Result<()> {
@@ -53,10 +53,11 @@ fn main() -> anyhow::Result<()> {
                 None => "new",
             };
             println!(
-                "{:<40} {:>6.2} GB  {}  {note}",
+                "{:<40} {:>6.2} GB  {}  {}  {note}",
                 d.file_name,
                 d.bytes as f64 / 1e9,
-                &d.revision[..8]
+                &d.revision[..8],
+                d.published.as_deref().unwrap_or("-")
             );
         }
         let added = engine::models::register(found.into_iter().map(|d| d.into_entry()));
@@ -106,11 +107,19 @@ fn main() -> anyhow::Result<()> {
     );
     println!();
     match result {
-        Ok(path) => println!(
+        Ok(Downloaded::Placed(path)) => println!(
             "verified and saved {} in {:.1?}",
             path.display(),
             start.elapsed()
         ),
+        Ok(Downloaded::BesideOlder) => {
+            let path = store.replace_with_download(entry)?;
+            println!(
+                "verified and saved {} in place of an older revision in {:.1?}",
+                path.display(),
+                start.elapsed()
+            );
+        }
         Err(DownloadError::Cancelled) => println!("stopped; state: {:?}", store.state(entry)),
         Err(e) => return Err(e.into()),
     }

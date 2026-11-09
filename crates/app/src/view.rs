@@ -7,7 +7,7 @@ use std::time::{Duration, Instant, SystemTime};
 
 use engine::StopReason;
 use engine::llama::{Device, RuntimeOptions};
-use engine::models::{self as catalog, CatalogEntry, LocalState, ModelStore};
+use engine::models::{self as catalog, CatalogEntry, ModelStore};
 use engine::pfml::{GlossaryEntry, LangCode, TranslationOptions};
 use engine::worker::{Event, JobId, LoadRequest, MeasureRequest, Worker};
 use gpui_kit::assets::IconName as Lucide;
@@ -439,6 +439,8 @@ pub struct TranslatorView {
     loaded_on: Option<String>,
     /// A model to delete once the worker confirms it released the file.
     pending_delete: Option<&'static CatalogEntry>,
+    /// The model to update once the worker has released it (see [`ModelsEvent::ReplaceActive`]).
+    pending_replace: Option<&'static CatalogEntry>,
     settings: Settings,
     active_model: Option<ModelChoice>,
     model_ready: bool,
@@ -713,7 +715,7 @@ impl TranslatorView {
         let initial = match custom_model {
             Some(path) => Some(ModelChoice::Custom(path)),
             None => {
-                let downloaded = |e: &&CatalogEntry| store.state(e) == LocalState::Downloaded;
+                let downloaded = |e: &&CatalogEntry| store.state(e).is_usable();
                 settings
                     .model
                     .as_deref()
@@ -750,6 +752,7 @@ impl TranslatorView {
             devices: None,
             loaded_on: None,
             pending_delete: None,
+            pending_replace: None,
             settings,
             active_model: None,
             model_ready: false,
@@ -1074,6 +1077,11 @@ impl TranslatorView {
                 // The file stays open until the worker drops the model (and cannot be deleted
                 // on Windows before that), so delete it when `Event::Unloaded` arrives.
                 self.pending_delete = Some(entry);
+                self.unload_model(cx);
+            }
+            ModelsEvent::ReplaceActive(entry) => {
+                // As for deleting: Windows cannot replace the file while it is loaded.
+                self.pending_replace = Some(entry);
                 self.unload_model(cx);
             }
             ModelsEvent::ReviewLicense => self.open_license(false, window, cx),
@@ -1602,6 +1610,13 @@ impl TranslatorView {
             Event::LoadProgress(_) => return,
             Event::Unloaded => {
                 crate::app_log!("model released by the worker");
+                if let Some(entry) = self.pending_replace.take() {
+                    // Loaded again whether or not the newer file is in place: the older one
+                    // stays if it is not.
+                    self.models
+                        .update(cx, |models, cx| models.replace(entry, cx));
+                    self.load_model(ModelChoice::Catalog(entry), cx);
+                }
                 if let Some(entry) = self.pending_delete.take() {
                     let deleted = self.models.update(cx, |models, cx| {
                         models.delete(entry, "the active model, after unloading", cx)

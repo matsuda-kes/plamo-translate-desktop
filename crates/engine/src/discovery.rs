@@ -35,6 +35,12 @@ pub struct DiscoveredEntry {
     pub file_name: String,
     pub bytes: u64,
     pub sha256: String,
+    /// When the commit that last changed the file was made, and its title (see
+    /// [`CatalogEntry::published`]). Caches written by versions before 0.5.0 have neither.
+    #[serde(default)]
+    pub published: Option<String>,
+    #[serde(default)]
+    pub change: Option<String>,
 }
 
 impl DiscoveredEntry {
@@ -47,6 +53,10 @@ impl DiscoveredEntry {
                 == Some(&*self.quant)
             && is_lower_hex(&self.sha256, 64)
             && is_lower_hex(&self.revision, 40)
+            && self
+                .published
+                .as_deref()
+                .is_none_or(|p| timestamp(p).as_deref() == Some(p))
     }
 
     /// Converts to a catalog entry. The strings are leaked, which is fine for the handful of
@@ -64,6 +74,8 @@ impl DiscoveredEntry {
             file_name: leak(self.file_name),
             bytes: self.bytes,
             sha256: leak(self.sha256),
+            published: self.published.map(leak),
+            change: self.change.map(leak),
         }
     }
 }
@@ -84,6 +96,15 @@ struct TreeItem {
     kind: String,
     path: String,
     lfs: Option<LfsInfo>,
+    #[serde(rename = "lastCommit")]
+    last_commit: Option<LastCommit>,
+}
+
+/// The commit that last changed a file, listed with `expand=true`.
+#[derive(Deserialize)]
+struct LastCommit {
+    title: String,
+    date: String,
 }
 
 #[derive(Deserialize)]
@@ -109,8 +130,10 @@ pub fn discover() -> Result<Vec<DiscoveredEntry>, DiscoveryError> {
             continue;
         };
         let info: ModelInfo = get_json(&agent, &format!("{API}/{}", model.id))?;
-        let tree: Vec<TreeItem> =
-            get_json(&agent, &format!("{API}/{}/tree/{}", model.id, info.sha))?;
+        let tree: Vec<TreeItem> = get_json(
+            &agent,
+            &format!("{API}/{}/tree/{}?expand=true", model.id, info.sha),
+        )?;
         for item in tree {
             let (Some(lfs), true) = (item.lfs, item.kind == "file") else {
                 continue;
@@ -118,6 +141,10 @@ pub fn discover() -> Result<Vec<DiscoveredEntry>, DiscoveryError> {
             let Some(quant) = parse_file(&item.path, &family, &size) else {
                 continue;
             };
+            let (published, change) = item
+                .last_commit
+                .and_then(|c| Some((timestamp(&c.date)?, c.title)))
+                .unzip();
             found.push(DiscoveredEntry {
                 family: family.clone(),
                 size: size.clone(),
@@ -127,6 +154,8 @@ pub fn discover() -> Result<Vec<DiscoveredEntry>, DiscoveryError> {
                 file_name: item.path,
                 bytes: lfs.size,
                 sha256: lfs.oid,
+                published,
+                change,
             });
         }
     }
@@ -186,6 +215,24 @@ pub fn load_cache(path: &Path) -> Vec<DiscoveredEntry> {
         .into_iter()
         .filter(DiscoveredEntry::is_valid)
         .collect()
+}
+
+/// `2026-11-08T05:48:42.000Z` → `2026-11-08T05:48:42Z`, the form of the built-in catalog, so
+/// dates compare as strings.
+fn timestamp(date: &str) -> Option<String> {
+    let (seconds, zone) = (date.get(..19)?, date.get(19..)?);
+    let shape = seconds.bytes().enumerate().all(|(i, b)| match i {
+        4 | 7 => b == b'-',
+        10 => b == b'T',
+        13 | 16 => b == b':',
+        _ => b.is_ascii_digit(),
+    });
+    let utc = zone == "Z"
+        || zone
+            .strip_prefix('.')
+            .and_then(|z| z.strip_suffix('Z'))
+            .is_some_and(|f| !f.is_empty() && f.bytes().all(|b| b.is_ascii_digit()));
+    (shape && utc).then(|| format!("{seconds}Z"))
 }
 
 fn is_lower_hex(s: &str, len: usize) -> bool {
@@ -261,10 +308,47 @@ mod tests {
             file_name: "plamo-3-translate-2b-Q8_0.gguf".into(),
             bytes: 42,
             sha256: "a".repeat(64),
+            published: Some("2026-11-08T05:48:42Z".into()),
+            change: Some("Update the chat template".into()),
         };
         save_cache(&path, std::slice::from_ref(&entry)).unwrap();
-        assert_eq!(load_cache(&path), vec![entry]);
+        assert_eq!(load_cache(&path), vec![entry.clone()]);
+        // A cache of an earlier version, without dates, still loads.
+        let mut old: serde_json::Value = serde_json::to_value([&entry]).unwrap();
+        for e in old.as_array_mut().unwrap() {
+            let e = e.as_object_mut().unwrap();
+            e.remove("published");
+            e.remove("change");
+        }
+        std::fs::write(&path, old.to_string()).unwrap();
+        let loaded = load_cache(&path);
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(
+            (loaded[0].published.clone(), loaded[0].change.clone()),
+            (None, None)
+        );
         std::fs::remove_file(&path).unwrap();
         assert!(load_cache(&path).is_empty());
+    }
+
+    #[test]
+    fn normalizes_timestamps() {
+        assert_eq!(
+            timestamp("2026-11-08T05:48:42.000Z").as_deref(),
+            Some("2026-11-08T05:48:42Z")
+        );
+        assert_eq!(
+            timestamp("2026-11-08T05:48:42Z").as_deref(),
+            Some("2026-11-08T05:48:42Z")
+        );
+        for date in [
+            "2026-11-08",
+            "2026-11-08T05:48:42+09:00",
+            "2026-11-08T05:48:42.Z",
+            "2026/11/08T05:48:42Z",
+            "",
+        ] {
+            assert_eq!(timestamp(date), None, "{date}");
+        }
     }
 }
