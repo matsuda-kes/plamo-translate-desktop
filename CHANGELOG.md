@@ -8,17 +8,17 @@ All notable changes to PLaMo Translate Desktop. Each release's section here also
 
 - The app updates itself: it asks GitHub at most once a day whether a new version is out, and the status bar then says so. Clicking it downloads the new version (checked against `SHA256SUMS.txt`), and **Restart to update** starts the new version. Files added to the app's folder stay. **Check for new versions** in Settings turns the check off, and **Check now** asks at once. Settings also shows the app's version.
   - Version 0.4.0 and earlier cannot update themselves: install this version by hand as before (replace the app's files with the new package's). From this version on, the app updates itself.
-- The browser extension follows: when the app has updated its copy of the extension, the panel offers **Reload** to load the new version. The extension's own package says in the panel when a new version is out (at most once a day; **Check for new versions** in its settings turns this off).
-- A keyboard shortcut in the browser extension translates the page, as **Translate this page with PLaMo** in the right-click menu does. It has no key at first: set one at `chrome://extensions/shortcuts`.
 - When PFN publishes a new version of a downloaded model, its row in the Models dialog says so, with the date, and **Update** downloads it (the button's tooltip says what changed). The model stays usable meanwhile; the one in use is loaded again once the new file is in place.
 - The folder models are kept in can be changed: **Change…** next to it in the Models dialog, for example to keep them on another drive or share them with other tools ([#6](https://github.com/tanakh/plamo-translate-desktop/issues/6)). Models already downloaded stay where they are. The browser extension's host uses the same folder.
-- The browser extension's in-browser engine does the same for its models: a newer version on Hugging Face (asked at most once a day; offline, nothing changes) shows under the model in **Settings**, with **Update**. The model list points to the files of 2026-11-08; a model downloaded before stays usable.
 - **UI size** in Settings (100–200%) enlarges the interface on top of the display scaling of the OS, for a high-DPI display that a Linux desktop does not scale ([#5](https://github.com/tanakh/plamo-translate-desktop/issues/5)). The window opens larger to match.
+- The browser extension follows the app's updates: when the app has updated its copy of the extension, the panel offers **Reload** to load the new version. The extension's own package says in the panel when a new version is out (at most once a day; **Check for new versions** in its settings turns this off).
+- The browser extension's in-browser engine also tells about new versions of its models: a newer version on Hugging Face (asked at most once a day; offline, nothing changes) shows under the model in **Settings**, with **Update**. A model downloaded before stays usable.
+- A keyboard shortcut in the browser extension translates the page, as **Translate this page with PLaMo** in the right-click menu does. It has no key at first: set one at `chrome://extensions/shortcuts`.
 - A keyboard shortcut in the browser extension opens the side panel and translates the selected text there, as **Translate with PLaMo** in the right-click menu does; with nothing selected, it puts the cursor in the panel's text box. It has no key at first: set one at `chrome://extensions/shortcuts`.
 
 ### Changed
 
-- The built-in model list points to the files of 2026-11-08.
+- The built-in model lists of the app and of the in-browser engine point to the files of 2026-11-08.
 - Closing the box of a page translation (×) ends the translation of the page. It came back with the next translated paragraph. What is translated stays, and translating the page again goes on with the rest.
 
 ### Fixed
