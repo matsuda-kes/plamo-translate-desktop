@@ -66,9 +66,8 @@ with their SHA-256 checksums in `SHA256SUMS.txt`. For the latest changes, build 
   - It is built on Ubuntu 24.04 and needs glibc 2.39 or later (Ubuntu 24.04, Debian 13, Fedora 40, or newer),
     plus `libgomp1`, `libxkbcommon-x11-0`, and `libxcb1`, which desktop installations usually have.
   - It needs a Wayland or X11 session with a Vulkan driver, which the UI uses for rendering and translation can use on the GPU, and a CJK font such as `fonts-noto-cjk`.
-  - On a high-DPI display: under Wayland the app follows the scale the compositor gives each display, moving between them included.
-    Under X11 one scale applies to every display, read at start from `Xft.dpi` or, without it, the primary display's size;
-    `GPUI_X11_SCALE_FACTOR=2` (any number) sets it instead. If the interface is still too small, raise **UI size** in Settings.
+  - The app follows the display scaling of the desktop. If it looks too small on a high-DPI display (some desktops, X11 ones in particular,
+    do not scale it), raise **UI size** in Settings.
   - To add it to the application menu, run this in the extracted folder:
 
     ```sh
